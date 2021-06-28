@@ -90,7 +90,7 @@ int main(void)
 //	uint16_t therm_voltage; //[mV]
 //	uint16_t therm_resistance; //[ohms]
 //	uint16_t therm_temp; //[C]
-//
+////
 //	uint16_t user_speed;
 //	uint16_t mcwb_speed;
 //
@@ -151,8 +151,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   //sprintf(msg_debug, "%hu\r\n", "ADC Started\n");
-//  MC_ProgramSpeedRampMotor1(500/6.0, 1500);
-//  MC_StartMotor1();
+  MC_ProgramSpeedRampMotor1(500/6.0, 1500);
+  MC_StartMotor1();
 
   /* USER CODE END 2 */
 
