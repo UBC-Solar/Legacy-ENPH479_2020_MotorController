@@ -6,6 +6,7 @@
  *  @author Alex Ezzat (aezzat1)
  */
 
+#define PI = 3.14
 // Comment out the line below to disable printf debugging
 #define PRINTF_DEBUG
 
@@ -23,6 +24,7 @@ void FSM_reset();
 void FSM_readDriveCommand();
 void FSM_torqueCommand();
 void FSM_speedCommand();
+void FSM_regenCommand();
 void FSM_execRamp();
 int FSM_checkFaults();
 void FSM_fault();
@@ -30,6 +32,9 @@ void FSM_monitor();
 void FSM_writeOutputs();
 
 // Helper functions:
+int convertUnits(int int16Val);
+int checkMailbox();
+
 #ifdef PRINTF_DEBUG
 void printStatus(int print_ok);
 void printMeasurements();
@@ -41,30 +46,29 @@ void printMeasurements();
 // Function names go in this array declaration, and must be in the same order
 // as the FSM_state_t enumeration.
 void (* FSM_state_table[])()
-    = {FSM_reset, FSM_readDriveCommand, FSM_torqueCommand, FSM_speedCommand,
-    		FSM_execRamp, FSM_checkFaults, FSM_fault, FSM_monitor, FSM_writeOutputs};
+    = {FSM_reset, FSM_readDriveCommand, FSM_torqueCommand, FSM_speedCommand, 
+    		FSM_regenCommand, FSM_execRamp, FSM_checkFaults, FSM_fault, 
+			FSM_monitor, FSM_writeOutputs};
 
 /*============================================================================*/
+
+/* FSM CONFIGURABLE CONSTANTS */
+float WHEELRAD = 0.1; //Wheel (tire) radius, [m, float]
+unsigned int NMAX = 4000; //Max motor speed, [RPM, int16_t]
+unsigned int TMAX = 0.5; //Max motor torque, [Nm, int16_t]
+unsigned int IBUSMAX = 10; //Max DC bus current, [A, int16_t]
+unsigned int CARMASS = 1; //Vehicle mass, [kg, int16_t]
+float VMAX = NMAX*(PI/30)*WHEELRAD //Max vehicle velocity, [m/s, int16_t]
+
+
 /* FSM GLOBAL VARIABLES */
-
-//TO-DO: Define constants
-/*
- * R 		//Wheel radius, [m, int16_t]
- * nMax 	//Max motor speed [RPM, int16_t]
- * TMax 	//Max motor torque [Nm, int16_t]
- * IBusMax 	//Max DC bus current [A, int16_t]
- * m 		//Vehicle mass, [kg, int16_t]
- *
- * VMax = nMax*(pi/30)*R //Max vehicle velocity, [m/s, int16_t]
- */
-
 FSM_state_t FSM_state;
 unsigned int last_uptime_tick; // for keeping track of uptime
 unsigned int last_update_tick; // for control of measurement timing
 int system_status; // status code for system
 
-int lastTime = 0;
-int TSL = 0; //TimeSinceLast
+int lastCommandTime = 0; //Time of last CAN message received, [ms]
+int TSL = 0; //Elapsed TimeSinceLast message, [ms]
 
 /*============================================================================*/
 /* FSM FUNCTIONS */
@@ -114,21 +118,10 @@ void FSM_reset()
 
     last_update_tick = HAL_GetTick(); // initialize last_measurement_tick
 
-    // switch state
-    if (system_status & MASK_BMS_FAULT) // If any faults are active
-    {
-#ifdef PRINTF_DEBUG
-        printf("Entering fault state\n");
-#endif
-        FSM_state = FSM_FAULT;
-    }
-    else
-    {
 #ifdef PRINTF_DEBUG
         printf("Entering NORMAL state\n");
 #endif
-        FSM_state = FSM_NORMAL;
-    }
+        FSM_state = FSM_READDRIVECOMMAND;
 
     return;
 }
@@ -138,15 +131,6 @@ void FSM_reset()
  */
 void FSM_readDriveCommand()
 {
-
-//	if (Vset >= VMax & ISet < 100)
-//	{
-//		FSM_state = FSM_TORQUECOMMAND;
-//	}
-//	else if (Vset < VMax & Iset <= 100)
-//	{
-//		FSM_state = FSM_SPEEDCOMMAND;
-//	}
 
 	lastTime = HAL_GetTick(); //TO-DO: Check
 
@@ -159,8 +143,8 @@ void FSM_readDriveCommand()
 	{
 		TSL = 0;
 		//Read CAN
-		// ISet = CAN.current //User current setpoint, [%]
-		// VSet = CAN.speed //User speed setpoint, [m/s]
+		// ISet = CAN.current //User current setpoint, [%, uint32]
+		// VSet = CAN.speed //User speed setpoint, [m/s, uint32]
 		ISet = convertType(ISet);
 		VSet = convertType(Vset);
 
@@ -172,12 +156,12 @@ void FSM_readDriveCommand()
 			FSM_state = FSM_TORQUECOMMAND;
 		else if (Vset < VMax)
 		{
-			if (Vset == 0)
+			if (Vset == 0.0)
 				FSM_state = FSM_REGENCOMMAND;
 			else
 				FSM_state = FSM_SPEEDCOMMAND;
 		}
-		else if (I == IBusMax)
+		else if (ISeet == 1.0)
 			FSM_state = FSM_TORQUECOMMAND;
 		else
 			FSM_state = FSM_SPEEDCOMMAND;
