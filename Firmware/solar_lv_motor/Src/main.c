@@ -91,13 +91,13 @@ int main(void)
 //	uint16_t therm_resistance; //[ohms]
 //	uint16_t therm_temp; //[C]
 ////
-//	uint16_t user_speed;
+	uint16_t user_speed;
 //	uint16_t mcwb_speed;
 //
 //	uint16_t convFlag;
 
 //	serial debug msg
-//	char msg_debug[10];
+	char msg_debug[10];
 //	RegConv_t PotentiometerConv;
 //	RegConv_t ThermistorConv;
 //	uint8_t PotentiometerHandle;
@@ -198,9 +198,11 @@ int main(void)
 //
 //	       // TODO: Refactor to using ramp state check
 //	       // TODO: configure blue button for start stop (change direction)
-//
-//	       //sprintf(msg_debug, "%hu\r\n", user_speed);
-//	       //HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	  user_speed = HAL_GetTick();
+	  sprintf(msg_debug, "%hu\r\n", user_speed);
+	  HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	  HAL_Delay(1000);
 //
 //	       sprintf(msg_debug, "Iq Ref: %hu\r\n", MC_GetIqdrefMotor1().q);
 //	       HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);

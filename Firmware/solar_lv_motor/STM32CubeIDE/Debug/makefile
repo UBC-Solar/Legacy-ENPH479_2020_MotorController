@@ -63,8 +63,8 @@ all: main-build
 main-build: solar_lv_motor.elf secondary-outputs
 
 # Tool invocations
-solar_lv_motor.elf: $(OBJS) $(USER_OBJS) /Users/alexezzat/Desktop/ENPH479_2020_MotorController/Firmware/solar_lv_motor/STM32CubeIDE/STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "solar_lv_motor.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/Users/alexezzat/Desktop/ENPH479_2020_MotorController/Firmware/solar_lv_motor/STM32CubeIDE/STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="solar_lv_motor.map" -Wl,--gc-sections -static -Wl,--start-group -l:libmc-gcc_M4_NoCCMRAM.lib -Wl,--end-group -L../../MCSDK_v5.4.5/MotorControl/lib --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+solar_lv_motor.elf: $(OBJS) $(USER_OBJS) C:\Users\Alex\Desktop\ENPH479\ Motor\ Controller\ENPH479_2020_MotorController\Firmware\solar_lv_motor\STM32CubeIDE\STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "solar_lv_motor.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\Alex\Desktop\ENPH479 Motor Controller\ENPH479_2020_MotorController\Firmware\solar_lv_motor\STM32CubeIDE\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="solar_lv_motor.map" -Wl,--gc-sections -static -Wl,--start-group -l:libmc-gcc_M4_NoCCMRAM.lib -Wl,--end-group -L../../MCSDK_v5.4.5/MotorControl/lib --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
