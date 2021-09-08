@@ -37,18 +37,8 @@
 #define MEAS_ERRORS_BEFORE_FAULTS       5 /*!< Number of speed
                                                              measurement errors before
                                                              main sensor goes in fault */
-/****** Hall sensors ************/
-#define HALL_MEAS_ERRORS_BEFORE_FAULTS  5 /*!< Number of failed
-                                                           derived class specific speed
-                                                           measurements before main sensor
-                                                           goes in fault */
-
-#define HALL_AVERAGING_FIFO_DEPTH        6 /*!< depth of the FIFO used to
-                                                           average mechanical speed in
-                                                           0.1Hz resolution */
-#define HALL_MTPA  false
 /****** State Observer + PLL ****/
-#define VARIANCE_THRESHOLD              0.062 /*!<Maximum accepted
+#define VARIANCE_THRESHOLD              0.1 /*!<Maximum accepted
                                                             variance on speed
                                                             estimates (percentage) */
 /* State observer scaling factors F1 */
@@ -174,6 +164,30 @@
                                                           power stage) */
 /******************************   START-UP PARAMETERS   **********************/
 
+/* Phase 1 */
+#define PHASE1_DURATION                250 /*milliseconds */
+#define PHASE1_FINAL_SPEED_UNIT         (0*SPEED_UNIT/_RPM)
+#define PHASE1_FINAL_CURRENT           0
+/* Phase 2 */
+#define PHASE2_DURATION                250 /*milliseconds */
+#define PHASE2_FINAL_SPEED_UNIT         (0*SPEED_UNIT/_RPM)
+#define PHASE2_FINAL_CURRENT           0
+/* Phase 3 */
+#define PHASE3_DURATION                0 /*milliseconds */
+#define PHASE3_FINAL_SPEED_UNIT         (0*SPEED_UNIT/_RPM)
+#define PHASE3_FINAL_CURRENT           458
+/* Phase 4 */
+#define PHASE4_DURATION                1000 /*milliseconds */
+#define PHASE4_FINAL_SPEED_UNIT         (300*SPEED_UNIT/_RPM)
+#define PHASE4_FINAL_CURRENT           6804
+/* Phase 5 */
+#define PHASE5_DURATION                2000 /* milliseconds */
+#define PHASE5_FINAL_SPEED_UNIT         (900*SPEED_UNIT/_RPM)
+#define PHASE5_FINAL_CURRENT           6804
+
+#define ENABLE_SL_ALGO_FROM_PHASE      1
+/* Sensor-less rev-up sequence */
+#define STARTING_ANGLE_DEG             0  /*!< degrees [0...359] */
 /* Observer start-up output conditions  */
 #define OBS_MINIMUM_SPEED_RPM          450
 
@@ -195,8 +209,6 @@
 #define TRANSITION_DURATION            0  /* Switch over duration, ms */
 /******************************   BUS VOLTAGE Motor 1  **********************/
 #define  M1_VBUS_SAMPLING_TIME  LL_ADC_SAMPLING_CYCLE(3)
-/******************************   Temperature sensing Motor 1  **********************/
-#define  M1_TEMP_SAMPLING_TIME  LL_ADC_SAMPLING_CYCLE(28)
 /******************************   Current sensing Motor 1   **********************/
 #define ADC_SAMPLING_CYCLES (15 + SAMPLING_CYCLE_CORRECTION)
 

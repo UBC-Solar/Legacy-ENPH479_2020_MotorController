@@ -25,6 +25,7 @@ Application/User/ui_task.o: \
  ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_dma_ex.h \
  ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_cortex.h \
  ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_adc.h \
+ ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_ll_adc.h \
  ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_adc_ex.h \
  ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_dac.h \
  ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_dac_ex.h \
@@ -96,7 +97,6 @@ Application/User/ui_task.o: \
  ../../MCSDK_v5.4.5/MotorControl/MCSDK/UILibrary/Inc/dac_common_ui.h \
  ../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/F4xx/Inc/ics_f4xx_pwm_curr_fdbk.h \
  ../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Inc/ics_dd_pwmncurrfdbk.h \
- ../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Inc/hall_speed_pos_fdbk.h \
  ../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Inc/ramp_ext_mngr.h \
  ../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Inc/circle_limitation.h \
  ../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Inc/sto_speed_pos_fdbk.h \
@@ -156,6 +156,8 @@ Application/User/ui_task.o: \
 ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_cortex.h:
 
 ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_adc.h:
+
+../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_ll_adc.h:
 
 ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_adc_ex.h:
 
@@ -300,8 +302,6 @@ Application/User/ui_task.o: \
 ../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/F4xx/Inc/ics_f4xx_pwm_curr_fdbk.h:
 
 ../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Inc/ics_dd_pwmncurrfdbk.h:
-
-../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Inc/hall_speed_pos_fdbk.h:
 
 ../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Inc/ramp_ext_mngr.h:
 

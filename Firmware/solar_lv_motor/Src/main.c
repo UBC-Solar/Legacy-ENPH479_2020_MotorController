@@ -35,6 +35,29 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
+//Motor/vehicle parameters
+#define NMAX 4000.0 //Max motor velocity, [RPM]
+#define TMAX 1600.0 //Max motor torque, [Nm] //TODO torque ramp
+#define IMAXP 100.0 //Max motor current (discharge), [%]
+#define IREGENMAXP 100.0 //Max regen current, [%]
+#define IREGENMAX 8.0 //Max regen current, [A]
+#define WHEELRAD 0.004 //0.2413 //Wheel radius, [m]
+#define CARMASS 5.0 //Vehicle mass, [kg]
+
+//Firmware parameters
+#define NTOL 10.0 //Motor velocity logic tolerance, [RPM]
+#define ITOLP 10.0 //Motor current logic tolerance, [%]
+
+//Constants
+#define PI 3.14
+
+//Calculated constants
+#define WMAX NMAX*PI/30.0 //Max motor velocity, [rad/s]
+#define WTOL NTOL*PI/30.0 //Motor velocity logic tolerance, [rad/s]
+#define VMAX WMAX*WHEELRAD //Max vehicle velocity, [m/s]
+#define VTOL WTOL*WHEELRAD //Vehicle velocity logic tolerance, [m/s]
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -54,7 +77,124 @@ TIM_HandleTypeDef htim2;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+// ************************* GLOBAL VARIABLES ************************* //
+// ***** Global usage ***** //
+uint16_t state = 0; // State tracker
+uint16_t watchdog = 0; //Watchdog timer for CAN timeout
+char msg_debug[327]; // Serial debug msg
 
+// ***** CAN variables ***** //
+union {
+	float testCAN_IN_float;
+	uint32_t testCAN_IN_int;
+}
+testCAN_IN;
+
+union {
+	float CAN_IN_current_float;
+	uint32_t CAN_IN_current_int;
+}
+CAN_IN_current;
+
+union {
+	float CAN_IN_velocity_float;
+	uint32_t CAN_IN_velocity_int;
+}
+CAN_IN_velocity;
+
+union {
+	float CAN_OUT_busVoltage_float;
+	uint32_t CAN_OUT_busVoltage_int;
+}
+CAN_OUT_busVoltage;
+
+union {
+	float CAN_OUT_busCurrent_float;
+	uint32_t CAN_OUT_busCurrent_int;
+}
+CAN_OUT_busCurrent;
+
+union {
+	float CAN_OUT_mtrVelocity_float;
+	uint32_t CAN_OUT_mtrVelocity_int;
+}
+CAN_OUT_mtrVelocity;
+
+union {
+	float CAN_OUT_carVelocity_float;
+	uint32_t CAN_OUT_carVelocity_int;
+}
+CAN_OUT_carVelocity;
+
+union {
+	float CAN_OUT_phaseCurrent_float;
+	uint32_t CAN_OUT_phaseCurrent_int;
+}
+CAN_OUT_phaseCurrent;
+
+union {
+	float CAN_OUT_mtrTemp_float;
+	uint32_t CAN_OUT_mtrTemp_int;
+}
+CAN_OUT_mtrTemp;
+
+union {
+	float CAN_OUT_FETTemp_float;
+	uint32_t CAN_OUT_FETTemp_int;
+}
+CAN_OUT_FETTemp;
+
+// ***** Manual ADC variables ***** //
+RegConv_t Pot1Conv;
+uint8_t Pot1Handle;
+uint16_t pot1_value;
+
+RegConv_t Pot2Conv;
+uint8_t Pot2Handle;
+uint16_t pot2_value;
+
+RegConv_t DCCurrConv;
+uint8_t DCCurrHandle;
+uint16_t DCCurr_value;
+
+RegConv_t ThermAHConv;
+uint8_t ThermAHHandle;
+uint16_t thermAH_value;
+uint16_t thermAH_temp;
+
+RegConv_t ThermALConv;
+uint8_t ThermALHandle;
+uint16_t thermAL_value;
+uint16_t thermAL_temp;
+
+RegConv_t ThermBHConv;
+uint8_t ThermBHHandle;
+uint16_t thermBH_value;
+uint16_t thermBH_temp;
+
+RegConv_t ThermBLConv;
+uint8_t ThermBLHandle;
+uint16_t thermBL_value;
+uint16_t thermBL_temp;
+
+RegConv_t ThermCHConv;
+uint8_t ThermCHHandle;
+uint16_t thermCH_value;
+uint16_t thermCH_temp;
+
+RegConv_t ThermCLConv;
+uint8_t ThermCLHandle;
+uint16_t thermCL_value;
+uint16_t thermCL_temp;
+
+RegConv_t ThermMTRConv;
+uint8_t ThermMTRHandle;
+uint16_t thermMTR_value;
+uint16_t thermMTR_temp;
+
+// ***** Helper variables ***** //
+
+// ************************* END GLOBAL VARIABLES ************************* //
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -69,6 +209,87 @@ static void MX_USART2_UART_Init(void);
 static void MX_NVIC_Init(void);
 /* USER CODE BEGIN PFP */
 
+// ************************* STATE PROTOTYPES ************************* //
+// 0xx states: Startup
+void state000(void);
+void state001(void);
+void state002(void);
+void state003(void);
+void state099(void);
+
+// 1xx states: Reading input
+void state100(void);
+void state101(void);
+void state102(void);
+void state103(void);
+void state104(void);
+void state198(void);
+void state199(void);
+
+// 2xx states: Writing drive commands
+void state200(void);
+void state201(void);
+void state202(void);
+void state203(void);
+void state204(void);
+void state205(void);
+void state299(void);
+
+// 3xx states: Checking faults
+void state300(void);
+void state301(void);
+void state302(void);
+void state303(void);
+void state304(void);
+void state305(void);
+void state306(void);
+void state399(void);
+
+// 4xx states: Reading values
+void state400(void);
+void state401(void);
+void state402(void);
+void state403(void);
+void state404(void);
+void state405(void);
+void state406(void);
+void state407(void);
+void state408(void);
+void state409(void);
+void state410(void);
+void state411(void);
+void state499(void);
+
+// 5xx states: Sending CAN messages
+void state500(void);
+void state501(void);
+void state502(void);
+void state503(void);
+void state599(void);
+
+// 6xx states: Fan control
+void state600(void);
+void state601(void);
+void state602(void);
+void state603(void);
+void state699(void);
+
+// 7xx states: Faults
+void state700(void);
+void state701(void);
+void state702(void);
+void state703(void);
+void state704(void);
+void state705(void);
+void state706(void);
+void state799(void);
+// ************************* END STATE PROTOYPES ************************* //
+
+// ************************* HELPER PROTOTYPES ************************* //
+uint16_t convertTempVal(uint16_t thermXX_value);
+void printState();
+void printNum(int num);
+// ************************* END HELPER PROTOTYPES ************************* //
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -84,39 +305,36 @@ int main(void)
 {
   /* USER CODE BEGIN 1 */
 //  raw 12-bit ADC reading
-	uint16_t potentiometer_value;
+//	uint16_t pot1_value;
+//	uint16_t pot2_value;
+//
+//	uint16_t therm_value; //bits
+//	uint16_t therm_voltage; //[mV]
+//	uint16_t therm_resistance; //[ohms]
+//	uint16_t therm_temp; //[C]
+//
+//	uint16_t user_speed;
+//	uint16_t mcwb_speed;
+//	uint16_t user_current;
 
-	uint16_t therm_value; //bits
-	uint16_t therm_voltage; //[mV]
-	uint16_t therm_resistance; //[ohms]
-	uint16_t therm_temp; //[C]
+	Pot1Conv.regADC = ADC1; /* to be modify to match your ADC */
+	Pot1Conv.channel = ADC_CHANNEL_8;/* to be modify to match your ADC channel */
+	Pot1Conv.samplingTime = ADC_SAMPLETIME_3CYCLES; /* to be modify to match your sampling time */
+	Pot1Handle = RCM_RegisterRegConv (&Pot1Conv);
 
-	uint16_t user_speed;
-	uint16_t mcwb_speed;
+	Pot2Conv.regADC = ADC1; /* to be modify to match your ADC */
+	Pot2Conv.channel = ADC_CHANNEL_0;/* to be modify to match your ADC channel */
+	Pot2Conv.samplingTime = ADC_SAMPLETIME_3CYCLES; /* to be modify to match your sampling time */
+	Pot2Handle = RCM_RegisterRegConv (&Pot2Conv);
 
-	uint16_t convFlag;
+	ThermAHConv.regADC = ADC1; /* to be modify to match your ADC */
+	ThermAHConv.channel = ADC_CHANNEL_12;/* to be modify to match your ADC channel */
+	ThermAHConv.samplingTime = ADC_SAMPLETIME_3CYCLES; /* to be modify to match your sampling time */
+	ThermAHHandle = RCM_RegisterRegConv (&ThermAHConv);
 
-//	serial debug msg
-	char msg_debug[10];
-	RegConv_t PotentiometerConv;
-	RegConv_t ThermistorConv;
-	uint8_t PotentiometerHandle;
-	uint8_t ThermistorHandle;
-
-	PotentiometerConv.regADC = ADC1 ; /* to be modify to match your ADC */
-	PotentiometerConv.channel = ADC_CHANNEL_8;/* to be modify to match your ADC channel */
-	PotentiometerConv.samplingTime = ADC_SAMPLETIME_3CYCLES; /* to be modify to match your sampling time */
-	PotentiometerHandle = RCM_RegisterRegConv (&PotentiometerConv);
-
-	ThermistorConv.regADC = ADC1;
-	ThermistorConv.channel = ADC_CHANNEL_12;
-	ThermistorConv.samplingTime = ADC_SAMPLETIME_3CYCLES;
-	ThermistorHandle = RCM_RegisterRegConv (&ThermistorConv);
-
-	qd_t currRef;
-	currRef.q = 0;
-	currRef.d = 0;
-	convFlag = 4;
+//	qd_t currRef;
+//	currRef.q = 0;
+//	currRef.d = 0;
 
   /* USER CODE END 1 */
 
@@ -150,9 +368,7 @@ int main(void)
   MX_NVIC_Init();
   /* USER CODE BEGIN 2 */
 
-  //sprintf(msg_debug, "%hu\r\n", "ADC Started\n");
-  MC_ProgramSpeedRampMotor1(500/6.0, 1500);
-  MC_StartMotor1();
+  state000();
 
   /* USER CODE END 2 */
 
@@ -160,27 +376,73 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  //HAL_ADC_Start(&hadc1, pot1_raw, 3);
-	  //HAL_ADC_Start(&hadc1);
-	  // get potentiometer 1 ADC value
-	  //HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
-	  //pot1_raw = HAL_ADC_GetValue(&hadc1);
+	  switch (state)
+	  {
+  	  	  case 1: state001(); break;
+  	  	  case 2: state002(); break;
+  	  	  case 3: state003(); break;
+  	  	  case 99: state099(); break;
 
-	  //State table: convFlag =
-	  // 1: pot conversion scheduled
-	  // 2: pot conversion read
-	  // 3: therm conversion scheduled
-	  // 4: therm conversion read
-	  if (RCM_GetUserConvState() == RCM_USERCONV_IDLE && convFlag == 4)
-	      {
-		  /* if Idle, then program a new conversion request */
-	       RCM_RequestUserConv(PotentiometerHandle);
-	       convFlag = 1;
-	      }
+	  	  case 100: state100(); break;
+	  	  case 101: state101(); break;
+	  	  case 102: state102(); break;
+	  	  case 103: state103(); break;
+	  	  case 104: state104(); break;
+	  	  case 198: state198(); break;
+	  	  case 199: state199(); break;
 
-	      else if (RCM_GetUserConvState() == RCM_USERCONV_EOC && convFlag == 1)
-	      {
-	       /* if Done, then read the captured value */
+	  	  case 200: state200(); break;
+	  	  case 201: state201(); break;
+	  	  case 202: state202(); break;
+	  	  case 203: state203(); break;
+	  	  case 204: state204(); break;
+	  	  case 299: state299(); break;
+
+	  	  case 300: state300(); break;
+	  	  case 301: state301(); break;
+	  	  case 302: state302(); break;
+	  	  case 303: state303(); break;
+	  	  case 304: state304(); break;
+	  	  case 305: state305(); break;
+	  	  case 306: state306(); break;
+	  	  case 399: state399(); break;
+
+	  	  case 400: state400(); break;
+	  	  case 401: state401(); break;
+	  	  case 402: state402(); break;
+	  	  case 403: state403(); break;
+	  	  case 404: state404(); break;
+	  	  case 405: state405(); break;
+	  	  case 406: state406(); break;
+	  	  case 407: state407(); break;
+	  	  case 408: state408(); break;
+	  	  case 409: state409(); break;
+	  	  case 410: state410(); break;
+	  	  case 411: state411(); break;
+	  	  case 499: state499(); break;
+
+	  	  case 500: state500(); break;
+	  	  case 501: state501(); break;
+	  	  case 502: state502(); break;
+	  	  case 503: state503(); break;
+	  	  case 599: state599(); break;
+
+	  	  case 600: state600(); break;
+	  	  case 601: state601(); break;
+	  	  case 602: state602(); break;
+	  	  case 603: state603(); break;
+	  	  case 699: state699(); break;
+
+	  	  case 700: state700(); break;
+	  	  case 701: state701(); break;
+	  	  case 702: state702(); break;
+	  	  case 703: state703(); break;
+	  	  case 704: state704(); break;
+	  	  case 705: state705(); break;
+	  	  case 706: state706(); break;
+	  	  case 799: state799(); break;
+	  }
+/*	TEST CODE
 	       potentiometer_value = RCM_GetUserConv();
 	       user_speed = potentiometer_value * 4000.0 / 65520.0;
 	       mcwb_speed = user_speed/6.0;
@@ -188,64 +450,16 @@ int main(void)
 	       //MC_ProgramSpeedRampMotor1(mcwb_speed, 1500);
 	       currRef.q = user_speed;
 	       MC_SetCurrentReferenceMotor1(currRef);
-	       HAL_Delay(1000);
-
-	       convFlag = 2;
 
 	       //if(user_speed < 100){
 	    	   //MC_StopMotor1();
 	       //}
 
-	       // TODO: Refactor to using ramp state check
-	       // TODO: configure blue button for start stop (change direction)
-
-	       //sprintf(msg_debug, "%hu\r\n", user_speed);
-	       //HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-
-	       sprintf(msg_debug, "Iq Ref: %hu\r\n", MC_GetIqdrefMotor1().q);
-	       HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-
-//	       sprintf(msg_debug, "Real Iq: %hu\r\n", MC_GetIqdMotor1().q);
-//	       HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-//
-//	       sprintf(msg_debug, "Measured speed: %hu\r\n", MC_GetMecSpeedAverageMotor1());
-//	       HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-//
-//	       sprintf(msg_debug, "Te Ref: %hu\r\n", MC_GetTerefMotor1());
-//	       HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-	      }
-
-	  if (RCM_GetUserConvState() == RCM_USERCONV_IDLE && convFlag == 2)
-	  	      {
-	  		  /* if Idle, then program a new conversion request */
-	  	       RCM_RequestUserConv(ThermistorHandle );
-	  	       convFlag = 3;
-	  	      }
-
-	  	      else if (RCM_GetUserConvState() == RCM_USERCONV_EOC && convFlag == 3)
-	  	      {
-	  	       /* if Done, then read the captured value */
-	  	       therm_value = RCM_GetUserConv();
-	  	       therm_value = therm_value / 16.0; // Convert left-aligned to right-aligned (0-4096)
-	  	       therm_voltage = therm_value * 3300.0 / 4096.0; //Convert to mV (to avoid decimal places)
-	  	       therm_resistance = 3300.0 * 3300 / therm_voltage;
-	  	       therm_resistance = therm_resistance - 3300;
-	  	       therm_temp = 1000.0*(log(therm_resistance / 10000.0) + (3435.0/298.0));
-	  	       therm_temp = 1000.0 * 3435.0 / therm_temp;
-	  	       therm_temp = therm_temp - 273.0;
-	  	       convFlag = 4;
-
 	  	       //MC_ProgramSpeedRampMotor1(mcwb_speed, 1500);
 //	  	       currRef.q = user_speed;
 //	  	       MC_SetCurrentReferenceMotor1(currRef);
-//	  	       HAL_Delay(1000);
+	  	      */
 
-	  	       sprintf(msg_debug, "Thermistor resistance: %hu\r\n", therm_resistance);
-	  	       HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-
-	  	     sprintf(msg_debug, "Temperature: %hu\r\n", therm_temp);
-	  	     HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-	  	      }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -617,7 +831,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = M1_HALL_TIM_PERIOD;
+  //htim2.Init.Period = M1_HALL_TIM_PERIOD;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -631,7 +845,7 @@ static void MX_TIM2_Init(void)
   }
   sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
   sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
-  sConfig.IC1Filter = M1_HALL_IC_FILTER;
+  //sConfig.IC1Filter = M1_HALL_IC_FILTER;
   sConfig.Commutation_Delay = 0;
   if (HAL_TIMEx_HallSensor_Init(&htim2, &sConfig) != HAL_OK)
   {
@@ -689,6 +903,7 @@ static void MX_USART2_UART_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOH_CLK_ENABLE();
@@ -696,10 +911,897 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(DRV_DIS_GPIO_Port, DRV_DIS_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(FLT_OUT_GPIO_Port, FLT_OUT_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIO_OUT_GPIO_Port, GPIO_OUT_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : DRV_DIS_Pin */
+  GPIO_InitStruct.Pin = DRV_DIS_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(DRV_DIS_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : MTR_OC_Pin HV_OV_Pin */
+  GPIO_InitStruct.Pin = MTR_OC_Pin|HV_OV_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : FET_OT_Pin */
+  GPIO_InitStruct.Pin = FET_OT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(FET_OT_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : MTR_OT_Pin */
+  GPIO_InitStruct.Pin = MTR_OT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(MTR_OT_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : FLT_OUT_Pin */
+  GPIO_InitStruct.Pin = FLT_OUT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(FLT_OUT_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : GPIO_OUT_Pin */
+  GPIO_InitStruct.Pin = GPIO_OUT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIO_OUT_GPIO_Port, &GPIO_InitStruct);
+
 }
 
 /* USER CODE BEGIN 4 */
+// ************************* STATE FUNCTIONS *************************//
 
+//***** 1xx states: Startup *****//
+/**
+ * @brief Startup entrance state
+ */
+void state000(void)
+{
+//	state = 1;
+	state = 99; //Workbench mode
+
+	sprintf(msg_debug, "Going to state %hu\r\n", state);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	HAL_Delay(1000);
+
+	printNum(VMAX);
+}
+
+/**
+ * @brief Check starting values
+ */
+void state001(void)
+{
+	printState();
+
+	state = 100;
+	//HV OV
+	if (HAL_GPIO_ReadPin(HV_OV_GPIO_Port, HV_OV_Pin) == 1)
+	{
+		sprintf(msg_debug, "DC BUS OV\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+		HAL_Delay(1000);
+		state = 703;
+	}
+
+	//MTR OT
+	else if (HAL_GPIO_ReadPin(MTR_OT_GPIO_Port, MTR_OT_Pin) == 1)
+	{
+		sprintf(msg_debug, "MOTOR OT\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+		HAL_Delay(1000);
+		state = 701;
+	}
+
+	//TODO - MTR OC
+
+	//FET OT
+	else if (HAL_GPIO_ReadPin(FET_OT_GPIO_Port, FET_OT_Pin) == 1)
+	{
+		sprintf(msg_debug, "FET OT\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+		HAL_Delay(1000);
+		state = 704;
+	}
+
+	//MC FLT
+	else if (MC_GetSTMStateMotor1() == 10 || MC_GetSTMStateMotor1() == 11)
+	{
+		sprintf(msg_debug, "MOTOR CONTROL FAULT\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+		HAL_Delay(1000);
+		state = 706;
+	}
+
+}
+
+/**
+ * @brief EMPTY
+ */
+void state002(void)
+{
+	printState();
+}
+
+/**
+ * @brief EMPTY
+ */
+void state003(void)
+{
+	printState();
+}
+
+/**
+ * @brief Workbench mode
+ */
+void state099(void)
+{
+	printState();
+}
+
+//***** 1xx states: Reading inputs *****//
+/**
+ * @brief Input reading entrance state
+ */
+void state100(void)
+{
+	//printState();
+	state = 101;
+}
+
+/**
+ * @brief Check watchdog - TODO
+ */
+void state101(void)
+{
+	state = 102;
+}
+
+/**
+ * @brief Read CAN msg - TEMP: read pot 2
+ */
+void state102(void)
+{
+	if (RCM_GetUserConvState() == RCM_USERCONV_IDLE)
+	{
+		//if Idle, then program a new conversion request
+		RCM_RequestUserConv(Pot2Handle);
+	}
+	else if (RCM_GetUserConvState() == RCM_USERCONV_EOC)
+	{
+		//if Done, then read the captured value
+		pot2_value = RCM_GetUserConv();
+		//Scale to [%]
+		CAN_IN_current.CAN_IN_current_float = 100.0*((float) pot2_value) / 45535.0;
+
+//		sprintf(msg_debug, "CAN_IN_current float: %hu\r\n", (int) CAN_IN_current.CAN_IN_current_float);
+//		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+//		HAL_Delay(250);
+
+		state = 198;
+	}
+}
+
+/**
+ * @brief Increment time
+ */
+void state103(void)
+{
+	state = 104;
+}
+
+/**
+ * @brief Decide drive command
+ */
+void state104(void)
+{
+	//printState();
+
+	//Default: torque control
+	state = 201;
+
+	//If I > Imax
+	if (CAN_IN_current.CAN_IN_current_float > IMAXP + ITOLP)
+	{
+		//DNE
+		sprintf(msg_debug, "State DNE\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+		CAN_IN_current.CAN_IN_current_float = 0.0;
+		CAN_IN_velocity.CAN_IN_velocity_float = 0.0;
+		//state = 798;
+	}
+	// If I = 0
+	else if (CAN_IN_current.CAN_IN_current_float <= ITOLP)
+	{
+		//Torque control - do nothing
+	}
+	// If I = Imax && V <= Vmax
+	else if (CAN_IN_current.CAN_IN_current_float >= IMAXP - ITOLP
+			&& CAN_IN_current.CAN_IN_current_float <= IMAXP + ITOLP
+			&& CAN_IN_velocity.CAN_IN_velocity_float <= VMAX + VTOL)
+	{
+		// Speed control
+		state = 202;
+		if (CAN_IN_velocity.CAN_IN_velocity_float < VTOL)
+		{
+			// Regen
+			state = 203;
+		}
+	}
+	// If I < Imax && V < VMax
+	else if (CAN_IN_current.CAN_IN_current_float < IMAXP - ITOLP
+			&& CAN_IN_velocity.CAN_IN_velocity_float < VMAX - VTOL)
+	{
+		// Speed control
+		state = 202;
+		if (CAN_IN_velocity.CAN_IN_velocity_float < VTOL)
+		{
+			// Regen
+			state = 203;
+		}
+	}
+}
+
+/**
+ * @brief TEMP - read pot 1
+ */
+void state198(void)
+{
+	if (RCM_GetUserConvState() == RCM_USERCONV_IDLE)
+	{
+		//if Idle, then program a new conversion request
+		RCM_RequestUserConv(Pot1Handle);
+	}
+	else if (RCM_GetUserConvState() == RCM_USERCONV_EOC)
+	{
+		//if Done, then read the captured value
+		pot1_value = RCM_GetUserConv();
+
+		//Scale to [m/s]
+		CAN_IN_velocity.CAN_IN_velocity_float = ((float) pot1_value) / 45535.0 * VMAX;
+
+//		sprintf(msg_debug, "CAN_IN_velocity float: %hu\r\n", (int) CAN_IN_velocity.CAN_IN_velocity_float);
+//		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+//		HAL_Delay(250);
+
+		state = 103;
+	}
+}
+
+/**
+ * @brief Input reading exit state
+ */
+void state199(void)
+{
+	sprintf(msg_debug, "State %hu\r\n", state);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	state = 200;
+	HAL_Delay(1000);
+}
+
+//***** 2xx states: Writing drive commands *****//
+/**
+ * @brief Drive command entrance state
+ */
+void state200(void)
+{
+	printState();
+	state = 201;
+}
+
+/**
+ * @brief Write torque ramp
+ */
+void state201(void)
+{
+//	sprintf(msg_debug, "Torque ramp\r\n");
+//	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	float finalTorque = CAN_IN_current.CAN_IN_current_float * TMAX / 100.0;
+
+	MC_ProgramTorqueRampMotor1((int) finalTorque*32768, 0); //TODO torque ramp
+	state = 204;
+}
+
+/**
+ * @brief Write speed ramp
+ */
+void state202(void)
+{
+	sprintf(msg_debug, "Speed ramp\r\n");
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	float finalSpeed = CAN_IN_velocity.CAN_IN_velocity_float * 30.0 / (PI * WHEELRAD); //RPM
+
+	MC_ProgramSpeedRampMotor1(finalSpeed/6.0, 0);
+	state = 204;
+}
+
+/**
+ * @brief Write regen speed ramp
+ */
+void state203(void)
+{
+	//printState();
+
+	float vehicleSpeed = MC_GetMecSpeedAverageMotor1() * WHEELRAD * PI / 30.0;
+	float regenPower = Vbat * IREGENMAX * CAN_IN_current.CAN_IN_current_float / 100.0; //P = VI
+	float regenEnergy = 0.5 * CARMASS * vehicleSpeed * vehicleSpeed; //1/2 mV^2
+	float regenTime = regenEnergy / regenPower; //[s]
+	float regenTimeMS = regenTime * 1000.0;
+
+	MC_ProgramSpeedRampMotor1(0, regenTimeMS);
+	state = 204;
+}
+
+/**
+ * @brief Set motor status
+ */
+void state204(void)
+{
+	int motorState = MC_GetSTMStateMotor1();
+	int motorSpeed = MC_GetMecSpeedAverageMotor1();
+
+	int motorSpin = 0;
+	int userSpin = 0;
+	int STMSpin = 0;
+
+	if (motorSpeed > 0) motorSpin = 1;
+	if (CAN_IN_velocity.CAN_IN_velocity_float > VTOL) userSpin = 1;
+	if (!(motorState == 0 || motorState == 7)) STMSpin = 1;
+
+	//Cases:
+	//If motor is     spinning AND should     be AND STM started --> Leave
+	//If motor is     spinning AND should     be AND STM stopped --> Fault/panic
+	//If motor is     spinning AND should not be AND STM started --> Stop
+	//If motor is     spinning AND should not be AND STM stopped --> Fault/panic
+	//If Motor is not spinning AND should     be AND STM started --> Check fault
+	//If Motor is not spinning AND should     be AND STM stopped --> Start
+	//If motor is not spinning AND should not be AND STM started --> Stop
+	//If motor is not spinning AND should not be AND STM stopped --> Leave
+
+	if (motorSpin == 1)
+	{
+		if (userSpin == 1)
+		{
+			if (STMSpin == 1)
+			{
+				//motor = spin, user = spin, STM = spin
+				//Leave
+			}
+			else
+			{
+				//motor = spin, user = spin, STM = stop
+				//Fault/panic
+			}
+		}
+		else
+		{
+			if (STMSpin == 1)
+			{
+				//motor = spin, user = stop, STM = spin
+				//Stop
+				MC_StopMotor1();
+			}
+			else
+			{
+				//motor = spin, user = stop, STM = stop
+				//Fault/panic
+			}
+		}
+	}
+	else
+	{
+		if (userSpin == 1)
+		{
+			if (STMSpin == 1)
+			{
+				//motor = stop, user = spin, STM = spin
+				//Check fault
+			}
+			else
+			{
+				//motor = stop, user = spin, STM = stop
+				//Start
+				MC_StartMotor1();
+			}
+		}
+		else
+		{
+			if (STMSpin == 1)
+			{
+				//motor = stop, user = stop, STM = spin
+				//Stop
+				MC_StopMotor1();
+			}
+			else
+			{
+				//motor = stop, user = stop, STM = stop
+				//Leave
+			}
+		}
+	}
+	//If Motor is not spinning AND should be
+	if (motorSpeed == 0 && CAN_IN_velocity.CAN_IN_velocity_float > VTOL &&  CAN_IN_current.CAN_IN_current_float > ITOLP)
+	{
+		//And STM thinks motor is stopped
+		if (motorState == 0 || motorState == 7)
+		{
+			//Start motor
+			MC_StartMotor1();
+			sprintf(msg_debug, "Motor started\r\n");
+			HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+		}
+	}
+	//If motor is not spinning AND should not be
+	else if (motorSpeed == 0 && CAN_IN_velocity.CAN_IN_velocity_float <= VTOL)
+	{
+		//And STM thinks motor is started
+		if (!(motorState == 0 || motorState == 7))
+		{
+			//Stop motor
+			MC_StopMotor1();
+			sprintf(msg_debug, "Motor stopped\r\n");
+			HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+		}
+	}
+	state = 300;
+}
+
+/**
+ * @brief Drive command exit state
+ */
+void state299(void)
+{
+	state = 300;
+}
+
+//***** 3xx states: Checking faults *****//
+/**
+ * @brief Fault check entrance state
+ */
+void state300(void)
+{
+	sprintf(msg_debug, "%hu\r\n", 300);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	state = 301;
+	HAL_Delay(1000);
+}
+
+/**
+ * @brief Check MTR OT
+ */
+void state301(void)
+{
+	state = 302;
+	if (HAL_GPIO_ReadPin(MTR_OT_GPIO_Port, MTR_OT_Pin) == 1)
+	{
+		sprintf(msg_debug, "MOTOR OT\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+		HAL_Delay(1000);
+		state = 701;
+	}
+}
+
+/**
+ * @brief Check MTR OC
+ */
+void state302(void)
+{
+	//TODO - MTR OC
+	state = 303;
+}
+
+/**
+ * @brief Check HV OV
+ */
+void state303(void)
+{
+	state = 304;
+	if (HAL_GPIO_ReadPin(HV_OV_GPIO_Port, HV_OV_Pin) == 1)
+	{
+		sprintf(msg_debug, "DC BUS OV\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+		HAL_Delay(1000);
+		state = 703;
+	}
+}
+
+/**
+ * @brief Check Check FET OT
+ */
+void state304(void)
+{
+	state = 305;
+	if (HAL_GPIO_ReadPin(FET_OT_GPIO_Port, FET_OT_Pin) == 1)
+	{
+		sprintf(msg_debug, "FET OT\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+		HAL_Delay(1000);
+		state = 704;
+	}
+}
+
+/**
+ * @brief Check Check communication fault
+ */
+void state305(void)
+{
+	state = 306;
+	//TODO
+}
+
+/**
+ * @brief Check control fault
+ */
+void state306(void)
+{
+	state = 400;
+	//TODO - extract error codes
+	if (MC_GetCurrentFaultsMotor1() > 0 || MC_GetOccurredFaultsMotor1() > 0)
+	{
+		state = 706;
+	}
+}
+
+/**
+ * @brief Fault check exit state
+ */
+void state399(void)
+{
+	state = 400;
+}
+
+//***** 4xx states: Reading values *****//
+/**
+ * @brief Value reading entrance state
+ */
+void state400(void)
+{
+	sprintf(msg_debug, "State %hu\r\n", state);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	state = 401;
+	HAL_Delay(1000);
+}
+
+/**
+ * @brief Read DC voltage
+ */
+void state401(void)
+{
+	state = 402;
+}
+
+/**
+ * @brief Read DC current
+ */
+void state402(void)
+{
+	state = 403;
+}
+
+/**
+ * @brief Read motor velocity (RPM) & vehicle velocity (m/s)
+ */
+void state403(void)
+{
+	state = 404;
+}
+
+/**
+ * @brief Read phase current
+ */
+void state404(void)
+{
+	state = 405;
+}
+
+/**
+ * @brief Read motor temperature
+ */
+void state405(void)
+{
+	if (RCM_GetUserConvState() == RCM_USERCONV_IDLE)
+	{
+		//if Idle, then program a new conversion request
+		RCM_RequestUserConv(ThermMTRHandle);
+	}
+	else if (RCM_GetUserConvState() == RCM_USERCONV_EOC)
+	{
+		//if Done, then read the captured value
+		thermMTR_value = RCM_GetUserConv();
+		thermMTR_temp = convertTempVal(thermMTR_value);
+		state = 406;
+	}
+}
+
+/**
+ * @brief Read FET temperature AH
+ */
+void state406(void)
+{
+	if (RCM_GetUserConvState() == RCM_USERCONV_IDLE)
+	{
+		//if Idle, then program a new conversion request
+		RCM_RequestUserConv(ThermAHHandle);
+	}
+	else if (RCM_GetUserConvState() == RCM_USERCONV_EOC)
+	{
+		//if Done, then read the captured value
+		thermAH_value = RCM_GetUserConv();
+		thermAH_temp = convertTempVal(thermAH_value);
+		state = 407;
+	}
+}
+
+/**
+ * @brief Read FET temperature AL
+ */
+void state407(void)
+{
+	state = 408;
+}
+
+/**
+ * @brief Read FET temperature BH
+ */
+void state408(void)
+{
+	state = 409;
+}
+
+/**
+ * @brief Read FET temperature BL
+ */
+void state409(void)
+{
+	state = 410;
+}
+
+/**
+ * @brief Read FET temperature CH
+ */
+void state410(void)
+{
+	state = 411;
+}
+
+/**
+ * @brief Read FET temperature CL
+ */
+void state411(void)
+{
+	state = 499;
+}
+
+/**
+ * @brief Value reading exit state
+ */
+void state499(void)
+{
+	sprintf(msg_debug, "State %hu\r\n", state);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	state = 500;
+	HAL_Delay(1000);
+}
+
+//***** 5xx states: Sending CAN messages *****//
+/**
+ * @brief CAN sending entrance state
+ */
+void state500(void)
+{
+	state = 501;
+}
+
+/**
+ * @brief
+ */
+void state501(void)
+{
+	state = 502;
+}
+
+/**
+ * @brief
+ */
+void state502(void)
+{
+	state = 503;
+}
+
+/**
+ * @brief
+ */
+void state503(void)
+{
+	state = 599;
+}
+
+/**
+ * @brief CAN sending exit state
+ */
+void state599(void)
+{
+	state = 600;
+}
+
+//***** 6xx states: Fan control *****//
+/**
+ * @brief Fan control enter state
+ */
+void state600(void)
+{
+	state = 601;
+}
+
+/**
+ * @brief
+ */
+void state601(void)
+{
+	state = 602;
+}
+
+/**
+ * @brief
+ */
+void state602(void)
+{
+	state = 603;
+}
+
+/**
+ * @brief
+ */
+void state603(void)
+{
+	state = 699;
+}
+
+/**
+ * @brief Fan control exit state
+ */
+void state699(void)
+{
+	state = 700;
+}
+
+//***** 7xx states: Faults *****//
+/**
+ * @brief Fault entrance state
+ */
+void state700(void)
+{
+	sprintf(msg_debug, "State %hu\r\n", state);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	HAL_GPIO_WritePin(FLT_OUT_GPIO_Port, FLT_OUT_Pin, GPIO_PIN_SET); //Set FLT_OUT high
+	HAL_GPIO_WritePin(DRV_DIS_GPIO_Port, DRV_DIS_Pin, GPIO_PIN_SET); //Set DRV_DIS high
+	sprintf(msg_debug, "Fault\n");
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	HAL_Delay(1000);
+	state = 701;
+}
+
+/**
+ * @brief MTR_OT fault
+ */
+void state701(void)
+{
+	sprintf(msg_debug, "State %hu\r\n", state);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	HAL_Delay(1000);
+	state = 702;
+}
+
+/**
+ * @brief MTR_OC fault
+ */
+void state702(void)
+{
+	sprintf(msg_debug, "State %hu\r\n", state);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	HAL_Delay(1000);
+	state = 703;
+}
+
+/**
+ * @brief HV_OV fault
+ */
+void state703(void)
+{
+	sprintf(msg_debug, "State %hu\r\n", state);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	HAL_Delay(1000);
+	state = 704;
+}
+
+/**
+ * @brief FET_OT fault
+ */
+void state704(void)
+{
+	sprintf(msg_debug, "State %hu\r\n", state);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	HAL_Delay(1000);
+	state = 704;
+}
+
+/**
+ * @brief Communication (soft) fault
+ */
+void state705(void)
+{
+	sprintf(msg_debug, "State %hu\r\n", state);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	HAL_Delay(1000);
+	state = 705;
+}
+
+/**
+ * @brief Motor control (soft) fault
+ */
+void state706(void)
+{
+	sprintf(msg_debug, "State %hu\r\n", state);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	HAL_Delay(1000);
+	state = 706;
+}
+
+/**
+ * @brief Fault exit state
+ */
+void state799(void)
+{
+	sprintf(msg_debug, "State %hu\r\n", state);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	while(1) {};
+}
+
+// ************************* END STATE FUNCTIONS ************************* //
+
+// ************************* HELPER FUNCTIONS ************************* //
+uint16_t convertTempVal(uint16_t thermXX_value)
+{
+	thermXX_value = thermXX_value / 16.0; // Convert left-aligned to right-aligned (0-4096)
+	float thermXX_voltage = thermXX_value * 3300.0 / 4096.0; //Convert to mV (to avoid decimal places)
+	float thermXX_resistance = 3300.0 * 3300 / thermXX_voltage;
+	thermXX_resistance = thermXX_resistance - 3300;
+	float thermXX_temp = 1000.0*(log(thermXX_resistance / 10000.0) + (3435.0/298.0));
+	thermXX_temp = 1000.0 * 3435.0 / thermXX_temp;
+	thermXX_temp = thermXX_temp - 273.0;
+	return (uint16_t) thermXX_temp;
+}
+
+void printState(void)
+{
+	sprintf(msg_debug, "State %hu\r\n", state);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	HAL_Delay(100);
+}
+
+void printNum(int num)
+{
+	sprintf(msg_debug, "Number: %hu\r\n", num);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	HAL_Delay(1000);
+}
+// ************************* END HELPER FUNCTIONS ************************* //
 /* USER CODE END 4 */
 
 /**
