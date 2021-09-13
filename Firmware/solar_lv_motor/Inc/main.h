@@ -61,8 +61,14 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define PHBL_TSENSE_Pin GPIO_PIN_0
+#define PHBL_TSENSE_GPIO_Port GPIOC
+#define PHBH_TSENSE_Pin GPIO_PIN_1
+#define PHBH_TSENSE_GPIO_Port GPIOC
 #define PHAH_TSENSE_Pin GPIO_PIN_2
 #define PHAH_TSENSE_GPIO_Port GPIOC
+#define PHAL_TSENSE_Pin GPIO_PIN_3
+#define PHAL_TSENSE_GPIO_Port GPIOC
 #define POT2_TEMP_Pin GPIO_PIN_0
 #define POT2_TEMP_GPIO_Port GPIOA
 #define M1_CURR_AMPL_U_Pin GPIO_PIN_1

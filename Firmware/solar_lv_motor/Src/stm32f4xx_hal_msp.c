@@ -102,14 +102,18 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef* hadc)
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
     /**ADC1 GPIO Configuration
+    PC0     ------> ADC1_IN10
+    PC1     ------> ADC1_IN11
     PC2     ------> ADC1_IN12
+    PC3     ------> ADC1_IN13
     PA0-WKUP     ------> ADC1_IN0
     PA1     ------> ADC1_IN1
     PC4     ------> ADC1_IN14
     PC5     ------> ADC1_IN15
     PB0     ------> ADC1_IN8
     */
-    GPIO_InitStruct.Pin = PHAH_TSENSE_Pin|M1_TEMPERATURE_Pin|M1_BUS_VOLTAGE_Pin;
+    GPIO_InitStruct.Pin = PHBL_TSENSE_Pin|PHBH_TSENSE_Pin|PHAH_TSENSE_Pin|PHAL_TSENSE_Pin
+                          |M1_TEMPERATURE_Pin|M1_BUS_VOLTAGE_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
@@ -169,14 +173,18 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* hadc)
     __HAL_RCC_ADC1_CLK_DISABLE();
 
     /**ADC1 GPIO Configuration
+    PC0     ------> ADC1_IN10
+    PC1     ------> ADC1_IN11
     PC2     ------> ADC1_IN12
+    PC3     ------> ADC1_IN13
     PA0-WKUP     ------> ADC1_IN0
     PA1     ------> ADC1_IN1
     PC4     ------> ADC1_IN14
     PC5     ------> ADC1_IN15
     PB0     ------> ADC1_IN8
     */
-    HAL_GPIO_DeInit(GPIOC, PHAH_TSENSE_Pin|M1_TEMPERATURE_Pin|M1_BUS_VOLTAGE_Pin);
+    HAL_GPIO_DeInit(GPIOC, PHBL_TSENSE_Pin|PHBH_TSENSE_Pin|PHAH_TSENSE_Pin|PHAL_TSENSE_Pin
+                          |M1_TEMPERATURE_Pin|M1_BUS_VOLTAGE_Pin);
 
     HAL_GPIO_DeInit(GPIOA, POT2_TEMP_Pin|M1_CURR_AMPL_U_Pin);
 
