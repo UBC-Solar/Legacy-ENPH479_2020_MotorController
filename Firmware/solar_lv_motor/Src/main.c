@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include "regular_conversion_manager.h"
 #include "math.h"
+#include "mc_config.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -44,6 +45,7 @@
 #define IREGENMAX 8.0 //Max battery (DC) regen current, [A]
 #define WHEELRAD 0.004 //Wheel radius, [m]
 #define CARMASS 5.0 //Vehicle mass, [kg]
+#define VBUSMIN 6.0 //Minimum acceptable DC voltage, [V]
 
 //Controller parameters
 #define ISENSORGAIN 0.077 //Current sensor gain, [V/A]
@@ -279,6 +281,7 @@ void state703(void);
 void state704(void);
 void state705(void);
 void state706(void);
+void state707(void);
 // ************************* END STATE PROTOYPES ************************* //
 
 // ************************* HELPER PROTOTYPES ************************* //
@@ -372,8 +375,6 @@ int main(void)
   /* Initialize interrupts */
   MX_NVIC_Init();
   /* USER CODE BEGIN 2 */
-
-  printState();
   state000();
 
   /* USER CODE END 2 */
@@ -382,11 +383,9 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-		sprintf(msg_debug, "STM state: %hu\r\n", MC_GetSTMStateMotor1());
-		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 	  switch (state)
 	  {
-  	  	  case 1: state001(); break;
+	  	  case 1: state001(); break;
   	  	  case 2: state002(); break;
   	  	  case 3: state003(); break;
   	  	  case 99: state099(); break;
@@ -442,6 +441,7 @@ int main(void)
 	  	  case 704: state704(); break;
 	  	  case 705: state705(); break;
 	  	  case 706: state706(); break;
+	  	  case 707: state707(); break;
 	  }
     /* USER CODE END WHILE */
 
@@ -954,14 +954,10 @@ static void MX_GPIO_Init(void)
  */
 void state000(void)
 {
-	//MC_StopMotor1(); //Make sure motor is stopped at startup
+	MC_StopMotor1(); //Make sure motor is stopped at startup
 	state = 1; //FSM mode
 	//state = 99; //Workbench mode
-
-	printState();
-	sprintf(msg_debug, "Going to state %hu\r\n", state);
-	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-	HAL_Delay(1000);
+	HAL_Delay(250);
 }
 
 /**
@@ -970,7 +966,7 @@ void state000(void)
 void state001(void)
 {
 	state = 2; //Assume no fault; prepare to go to next state
-
+	HAL_Delay(250);
 	//HV OV
 	if (HAL_GPIO_ReadPin(HV_OV_GPIO_Port, HV_OV_Pin) == 1)
 	{
@@ -1011,11 +1007,26 @@ void state001(void)
 }
 
 /**
- * @brief TODO: check if DC bus is active
+ * @brief Check if DC bus is active
  */
 void state002(void)
 {
-	state = 100;
+	CAN_OUT_busVoltage.CAN_OUT_busVoltage_float = ((float) PQD_MotorPowMeasM1.pVBS->AvBusVoltage_d) * ((float) PQD_MotorPowMeasM1.pVBS->ConversionFactor) / 65536.0;
+	if (CAN_OUT_busVoltage.CAN_OUT_busVoltage_float < VBUSMIN)
+	{
+		//Wait for DC bus to activate
+		sprintf(msg_debug, "Waiting for DC voltage\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	}
+	else
+	{
+		sprintf(msg_debug, "DC bus activated\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+		HAL_Delay(1000);
+		//Start watchdog when HV is started
+		lastTime = HAL_GetTick();
+		state = 100;
+	}
 }
 
 /**
@@ -1034,7 +1045,7 @@ void state099(void)
 	printState();
 }
 
-//***** 1xx states: Reading values *****//
+//***** 1xx states: Reading current values *****//
 /**
  * @brief Value reading entrance state
  */
@@ -1048,8 +1059,27 @@ void state100(void)
  */
 void state101(void)
 {
-	CAN_OUT_busVoltage.CAN_OUT_busVoltage_float = (float) 24; //TODO
-	state = 102;
+//	uint16_t voltageConversionFactor = PQD_MotorPowMeasM1.pVBS->ConversionFactor;
+//	uint16_t busVoltage_d = PQD_MotorPowMeasM1.pVBS->AvBusVoltage_d;
+//	float busVoltage_V = ((float) PQD_MotorPowMeasM1.pVBS->AvBusVoltage_d) * ((float) PQD_MotorPowMeasM1.pVBS->ConversionFactor) / 65536.0;
+
+	CAN_OUT_busVoltage.CAN_OUT_busVoltage_float = ((float) PQD_MotorPowMeasM1.pVBS->AvBusVoltage_d) * ((float) PQD_MotorPowMeasM1.pVBS->ConversionFactor) / 65536.0;
+
+	if (CAN_OUT_busVoltage.CAN_OUT_busVoltage_float < VBUSMIN)
+	{
+		//DC bus disconnected: soft fault
+		sprintf(msg_debug, "DC voltage missing\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+		state = 707;
+	}
+	else
+	{
+		sprintf(msg_debug, "DC voltage: %hu\r\n", (int) CAN_OUT_busVoltage.CAN_OUT_busVoltage_float);
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+		state = 102;
+	}
 }
 
 /**
@@ -1087,7 +1117,7 @@ void state104(void)
 {
 	CAN_OUT_phaseCurrent.CAN_OUT_phaseCurrent_float = ((float) MC_GetPhaseCurrentAmplitudeMotor1()) * S16ACONVFACTORINV;
 
-	sprintf(msg_debug, "1x Phase current (s16A): %hu\r\n", (int) (MC_GetPhaseCurrentAmplitudeMotor1()));
+	sprintf(msg_debug, "10x Phase current (A): %hu\r\n", (int) (10.0*CAN_OUT_phaseCurrent.CAN_OUT_phaseCurrent_float));
 	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 
 	state = 105;
@@ -1229,7 +1259,7 @@ void state111(void)
 	state = 200;
 }
 
-//***** 2xx states: Reading inputs *****//
+//***** 2xx states: Reading user inputs *****//
 /**
  * @brief Input reading entrance state
  */
@@ -1244,8 +1274,8 @@ void state200(void)
 void state201(void)
 {
 	currentTime = HAL_GetTick();
-	sprintf(msg_debug, "dt: %hu\r\n", currentTime - lastTime);
-	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+//	sprintf(msg_debug, "dt: %hu\r\n", currentTime - lastTime);
+//	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 
 	if (currentTime - lastTime > TIMERLIM)
 	{
@@ -1447,9 +1477,9 @@ void state304(void)
 
 	//Cases:
 	//If motor is     spinning AND should     be AND STM started --> Leave
-	//If motor is     spinning AND should     be AND STM stopped --> Fault/panic
+	//If motor is     spinning AND should     be AND STM stopped --> Fault/panic --> Fake (110)
 	//If motor is     spinning AND should not be AND STM started --> Stop
-	//If motor is     spinning AND should not be AND STM stopped --> Fault/panic
+	//If motor is     spinning AND should not be AND STM stopped --> Fault/panic --> Fake (100)
 	//If Motor is not spinning AND should     be AND STM started --> Check fault
 	//If Motor is not spinning AND should     be AND STM stopped --> Start
 	//If motor is not spinning AND should not be AND STM started --> Stop
@@ -1466,11 +1496,11 @@ void state304(void)
 	{
 		//motor = spin, user = spin, STM = stop
 		//Fault/panic
-		sprintf(msg_debug, "Motor spinning, STM stopped\r\n");
-		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-		sprintf(msg_debug, "STM state: %hu\r\n", MC_GetSTMStateMotor1());
-		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-		state = 706;
+//		sprintf(msg_debug, "Motor spinning, STM stopped\r\n");
+//		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+//		sprintf(msg_debug, "STM state: %hu\r\n", MC_GetSTMStateMotor1());
+//		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+//		state = 706;
 	}
 	else if (motorSpin == 1 && userSpin == 0 && STMSpin == 1)
 	{
@@ -1484,11 +1514,11 @@ void state304(void)
 	{
 		//motor = spin, user = stop, STM = stop
 		//Fault/panic
-		sprintf(msg_debug, "Motor spinning but user and STM stopped\r\n");
-		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-		sprintf(msg_debug, "STM state: %hu\r\n", MC_GetSTMStateMotor1());
-		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-		state = 706;
+//		sprintf(msg_debug, "Motor spinning but user and STM stopped\r\n");
+//		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+//		sprintf(msg_debug, "STM state: %hu\r\n", MC_GetSTMStateMotor1());
+//		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+//		state = 706;
 	}
 	else if (motorSpin == 0 && userSpin == 1 && STMSpin == 1)
 	{
@@ -1700,59 +1730,43 @@ void state700(void)
 }
 
 /**
- * @brief MTR_OT fault
+ * @brief Hard fault - MTR_OT
  */
 void state701(void)
 {
-	while(1)
-	{
-		MC_StopMotor1();
-		printState();
-		HAL_Delay(1000);
-	}
+	MC_StopMotor1();
+	while(1){}
 }
 
 /**
- * @brief MTR_OC fault
+ * @brief Hard fault - MTR_OC
  */
 void state702(void)
 {
-	while(1)
-	{
-		MC_StopMotor1();
-		printState();
-		HAL_Delay(1000);
-	}
+	MC_StopMotor1();
+	while(1){}
 }
 
 /**
- * @brief HV_OV fault
+ * @brief Hard Fault - HV_OV
  */
 void state703(void)
 {
-	while(1)
-	{
-		MC_StopMotor1();
-		printState();
-		HAL_Delay(1000);
-	}
+	MC_StopMotor1();
+	while(1){}
 }
 
 /**
- * @brief FET_OT fault
+ * @brief Hard fault - FET_OT
  */
 void state704(void)
 {
-	while(1)
-	{
-		MC_StopMotor1();
-		printState();
-		HAL_Delay(1000);
-	}
+	MC_StopMotor1();
+	while(1){}
 }
 
 /**
- * @brief Communication (soft) fault
+ * @brief Soft fault - Watchdog/communication error
  */
 void state705(void)
 {
@@ -1765,7 +1779,7 @@ void state705(void)
 }
 
 /**
- * @brief Motor control (soft) fault
+ * @brief Soft fault - Motor control error
  */
 void state706(void)
 {
@@ -1774,6 +1788,26 @@ void state706(void)
 		MC_StopMotor1();
 		printState();
 		HAL_Delay(1000);
+	}
+}
+
+/**
+ * @brief Soft fault - Missing DC voltage
+ */
+void state707(void)
+{
+	MC_StopMotor1();
+	sprintf(msg_debug, "Soft fault 707: DC voltage missing\r\n");
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	CAN_OUT_busVoltage.CAN_OUT_busVoltage_float = ((float) PQD_MotorPowMeasM1.pVBS->AvBusVoltage_d) * ((float) PQD_MotorPowMeasM1.pVBS->ConversionFactor) / 65536.0;
+
+	if (CAN_OUT_busVoltage.CAN_OUT_busVoltage_float > VBUSMIN)
+	{
+		//Restart controller
+		sprintf(msg_debug, "DC voltage reconnected\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+		state = 1;
 	}
 }
 

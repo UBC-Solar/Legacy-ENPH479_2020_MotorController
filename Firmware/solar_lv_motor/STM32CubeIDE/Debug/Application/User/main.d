@@ -102,7 +102,7 @@ Application/User/main.o: \
  ../../Inc/parameters_conversion.h ../../Inc/mc_math.h \
  ../../Inc/parameters_conversion_f4xx.h ../../Inc/pmsm_motor_parameters.h \
  ../../Inc/power_stage_parameters.h ../../Inc/drive_parameters.h \
- ../../Inc/mc_api.h
+ ../../Inc/mc_api.h ../../Inc/mc_config.h
 
 ../../Inc/main.h:
 
@@ -321,3 +321,5 @@ Application/User/main.o: \
 ../../Inc/drive_parameters.h:
 
 ../../Inc/mc_api.h:
+
+../../Inc/mc_config.h:
