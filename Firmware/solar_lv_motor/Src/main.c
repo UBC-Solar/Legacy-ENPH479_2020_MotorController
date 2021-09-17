@@ -261,13 +261,13 @@ void state404(void);
 void state405(void);
 void state406(void);
 
-// 5xx states: Sending CAN messages
+// 5xx states: Fan control
 void state500(void);
 void state501(void);
 void state502(void);
 void state503(void);
 
-// 6xx states: Fan control
+// 6xx states: CAN sending
 void state600(void);
 void state601(void);
 void state602(void);
@@ -957,7 +957,6 @@ void state000(void)
 	MC_StopMotor1(); //Make sure motor is stopped at startup
 	state = 1; //FSM mode
 	//state = 99; //Workbench mode
-	HAL_Delay(250);
 }
 
 /**
@@ -966,13 +965,13 @@ void state000(void)
 void state001(void)
 {
 	state = 2; //Assume no fault; prepare to go to next state
-	HAL_Delay(250);
+	HAL_Delay(250); //Temporary delay to account for startup transients (DC voltage spike)
+
 	//HV OV
 	if (HAL_GPIO_ReadPin(HV_OV_GPIO_Port, HV_OV_Pin) == 1)
 	{
 		sprintf(msg_debug, "001: DC BUS OV\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-		HAL_Delay(1000);
 		state = 703;
 	}
 
@@ -981,7 +980,6 @@ void state001(void)
 	{
 		sprintf(msg_debug, "001: MOTOR OT\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-		HAL_Delay(1000);
 		state = 701;
 	}
 
@@ -992,7 +990,6 @@ void state001(void)
 	{
 		sprintf(msg_debug, "001: FET OT\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-		HAL_Delay(1000);
 		state = 704;
 	}
 
@@ -1001,7 +998,6 @@ void state001(void)
 	{
 		sprintf(msg_debug, "001: MOTOR CONTROL FAULT\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-		HAL_Delay(1000);
 		state = 706;
 	}
 }
@@ -1022,7 +1018,6 @@ void state002(void)
 	{
 		sprintf(msg_debug, "DC bus activated\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-		HAL_Delay(1000);
 		//Start watchdog when HV is started
 		lastTime = HAL_GetTick();
 		state = 100;
@@ -1075,9 +1070,6 @@ void state101(void)
 	}
 	else
 	{
-		sprintf(msg_debug, "DC voltage: %hu\r\n", (int) CAN_OUT_busVoltage.CAN_OUT_busVoltage_float);
-		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-
 		state = 102;
 	}
 }
@@ -1116,10 +1108,6 @@ void state103(void)
 void state104(void)
 {
 	CAN_OUT_phaseCurrent.CAN_OUT_phaseCurrent_float = ((float) MC_GetPhaseCurrentAmplitudeMotor1()) * S16ACONVFACTORINV;
-
-	sprintf(msg_debug, "10x Phase current (A): %hu\r\n", (int) (10.0*CAN_OUT_phaseCurrent.CAN_OUT_phaseCurrent_float));
-	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-
 	state = 105;
 }
 
@@ -1477,9 +1465,9 @@ void state304(void)
 
 	//Cases:
 	//If motor is     spinning AND should     be AND STM started --> Leave
-	//If motor is     spinning AND should     be AND STM stopped --> Fault/panic --> Fake (110)
+	//If motor is     spinning AND should     be AND STM stopped --> Fake state
 	//If motor is     spinning AND should not be AND STM started --> Stop
-	//If motor is     spinning AND should not be AND STM stopped --> Fault/panic --> Fake (100)
+	//If motor is     spinning AND should not be AND STM stopped --> Fake state
 	//If Motor is not spinning AND should     be AND STM started --> Check fault
 	//If Motor is not spinning AND should     be AND STM stopped --> Start
 	//If motor is not spinning AND should not be AND STM started --> Stop
@@ -1489,17 +1477,11 @@ void state304(void)
 	{
 		//motor = spin, user = spin, STM = spin
 		//Leave
-		sprintf(msg_debug, "Motor spinning as expected\r\n");
-		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 	}
 	else if (motorSpin == 1 && userSpin == 1 && STMSpin == 0)
 	{
 		//motor = spin, user = spin, STM = stop
-		//Fault/panic
-//		sprintf(msg_debug, "Motor spinning, STM stopped\r\n");
-//		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-//		sprintf(msg_debug, "STM state: %hu\r\n", MC_GetSTMStateMotor1());
-//		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+		//Fault/panic?? State not really possible
 //		state = 706;
 	}
 	else if (motorSpin == 1 && userSpin == 0 && STMSpin == 1)
@@ -1513,27 +1495,16 @@ void state304(void)
 	else if (motorSpin == 1 && userSpin == 0 && STMSpin == 0)
 	{
 		//motor = spin, user = stop, STM = stop
-		//Fault/panic
-//		sprintf(msg_debug, "Motor spinning but user and STM stopped\r\n");
-//		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-//		sprintf(msg_debug, "STM state: %hu\r\n", MC_GetSTMStateMotor1());
-//		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+		//Fault/panic?? State not really possible
 //		state = 706;
 	}
 	else if (motorSpin == 0 && userSpin == 1 && STMSpin == 1)
 	{
 		//motor = stop, user = spin, STM = spin
 		//Stop motor, check DC bus, then proceed to check faults
-		sprintf(msg_debug, "Motor not spinning. DC connected?\r\n");
+		sprintf(msg_debug, "Motor not spinning. Stopping STM\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 		MC_StopMotor1();
-		sprintf(msg_debug, "STM stopped\r\n");
-		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-		HAL_Delay(1000);
-		// TODO - Check DC bus
-		// If DC bus NOK
-			// Soft fault
-			// State = 706;
 	}
 	else if (motorSpin == 0 && userSpin == 1 && STMSpin == 0)
 	{
@@ -1556,10 +1527,8 @@ void state304(void)
 	{
 		//motor = stop, user = stop, STM = stop
 		//Leave
-		sprintf(msg_debug, "No change\r\n");
-		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 	}
-	// Proceed to fault checking (3xx)
+	// Proceed to fault checking (4xx)
 }
 
 //***** 4xx states: Checking faults *****//
@@ -1647,9 +1616,9 @@ void state406(void)
 	}
 }
 
-//***** 5xx states: Sending CAN messages *****//
+//***** 5xx states: Fan control *****//
 /**
- * @brief CAN sending entrance state
+ * @brief Fan control entrance state
  */
 void state500(void)
 {
@@ -1680,9 +1649,9 @@ void state503(void)
 	state = 600;
 }
 
-//***** 6xx states: Fan control *****//
+//***** 6xx states: Sending CAN messages *****//
 /**
- * @brief Fan control enter state
+ * @brief CAN sending entrance state
  */
 void state600(void)
 {
@@ -1735,6 +1704,7 @@ void state700(void)
 void state701(void)
 {
 	MC_StopMotor1();
+	printState();
 	while(1){}
 }
 
@@ -1744,6 +1714,7 @@ void state701(void)
 void state702(void)
 {
 	MC_StopMotor1();
+	printState();
 	while(1){}
 }
 
@@ -1753,6 +1724,7 @@ void state702(void)
 void state703(void)
 {
 	MC_StopMotor1();
+	printState();
 	while(1){}
 }
 
@@ -1762,6 +1734,7 @@ void state703(void)
 void state704(void)
 {
 	MC_StopMotor1();
+	printState();
 	while(1){}
 }
 
@@ -1770,12 +1743,9 @@ void state704(void)
  */
 void state705(void)
 {
-	while(1)
-	{
-		MC_StopMotor1();
-		printState();
-		HAL_Delay(1000);
-	}
+	MC_StopMotor1();
+	printState();
+	while(1){}
 }
 
 /**
@@ -1783,12 +1753,9 @@ void state705(void)
  */
 void state706(void)
 {
-	while(1)
-	{
-		MC_StopMotor1();
-		printState();
-		HAL_Delay(1000);
-	}
+	MC_StopMotor1();
+	printState();
+	while(1){}
 }
 
 /**
