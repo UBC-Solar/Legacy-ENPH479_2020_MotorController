@@ -96,7 +96,7 @@ typedef struct
   *
   * Defined to 4 here.
   */
-#define RCM_MAX_CONV  8
+#define RCM_MAX_CONV  4
 
 /* Global variables ----------------------------------------------------------*/
 

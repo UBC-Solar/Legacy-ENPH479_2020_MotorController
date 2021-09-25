@@ -50,7 +50,7 @@
 
 //Controller parameters
 #define ISENSORGAIN 0.077 //Current sensor gain, [V/A]
-#define MOTORSPINUPTIME 1000 //Time to allow motor to start spinning upon restart [ms]
+#define MOTORSPINUPTIME 2000 //Time to allow motor to start spinning upon restart [ms]
 #define SPEEDRAMPTIME 150 //Ramp time for speed control command, can be 0 but may cause current surges[ms]
 #define TORQUERAMPTIME 150 ////Ramp time for torque control command, can be 0 but may cause current surges[ms]
 
@@ -782,7 +782,6 @@ static void MX_TIM2_Init(void)
   /* USER CODE END TIM2_Init 0 */
 
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_HallSensor_InitTypeDef sConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
 
   /* USER CODE BEGIN TIM2_Init 1 */
@@ -803,15 +802,7 @@ static void MX_TIM2_Init(void)
   {
     Error_Handler();
   }
-  sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
-  sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
-//  sConfig.IC1Filter = M1_HALL_IC_FILTER;
-  sConfig.Commutation_Delay = 0;
-  if (HAL_TIMEx_HallSensor_Init(&htim2, &sConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_OC2REF;
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
   {
@@ -872,20 +863,20 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(DRV_DIS_GPIO_Port, DRV_DIS_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, DRV_DIS_Pin|HALLC_OUT_Pin|HALLB_OUT_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(FLT_OUT_GPIO_Port, FLT_OUT_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, FLT_OUT_Pin|HALLA_OUT_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIO_OUT_GPIO_Port, GPIO_OUT_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : DRV_DIS_Pin */
-  GPIO_InitStruct.Pin = DRV_DIS_Pin;
+  /*Configure GPIO pins : DRV_DIS_Pin HALLC_OUT_Pin HALLB_OUT_Pin */
+  GPIO_InitStruct.Pin = DRV_DIS_Pin|HALLC_OUT_Pin|HALLB_OUT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(DRV_DIS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pins : MTR_OC_Pin HV_OV_Pin */
   GPIO_InitStruct.Pin = MTR_OC_Pin|HV_OV_Pin;
@@ -905,12 +896,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(MTR_OT_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : FLT_OUT_Pin */
-  GPIO_InitStruct.Pin = FLT_OUT_Pin;
+  /*Configure GPIO pins : FLT_OUT_Pin HALLA_OUT_Pin */
+  GPIO_InitStruct.Pin = FLT_OUT_Pin|HALLA_OUT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(FLT_OUT_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : GPIO_OUT_Pin */
   GPIO_InitStruct.Pin = GPIO_OUT_Pin;
@@ -932,6 +923,10 @@ static void MX_GPIO_Init(void)
 void state000(void)
 {
 	//MC_StopMotor1(); //Make sure motor is stopped at startup
+	HAL_GPIO_WritePin(GPIO_OUT_GPIO_Port, GPIO_OUT_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(HALLA_OUT_GPIO_Port, HALLA_OUT_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(HALLB_OUT_GPIO_Port, HALLB_OUT_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(HALLC_OUT_GPIO_Port, HALLC_OUT_Pin, GPIO_PIN_SET);
 	state = 1; //FSM mode
 //	state = 99; //Workbench mode
 }
@@ -987,6 +982,8 @@ void state102(void)
 		//if Done, then read the captured value
 		CAN_OUT_busCurrent.CAN_OUT_busCurrent_float = ((RCM_GetUserConv() * 3.3 / 65535.0) - 1.65) / ISENSORGAIN;
 		state = 103;
+		sprintf(msg_debug, "100x DC current: %hu\r\n", (int) (100.0*CAN_OUT_busCurrent.CAN_OUT_busCurrent_float));
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 	}
 }
 
@@ -1332,7 +1329,10 @@ void state405(void)
 	else
 	{
 		lastWDTime = HAL_GetTick();
-		CAN_OUT_ErrorFlags &= ~(1<<20); //Clear error flag bit
+		if(((CAN_OUT_ErrorFlags>>20) & 1) == 1) //If error flag was set but no error is still present
+		{
+			CAN_OUT_ErrorFlags &= ~(1<<20); //Clear error flag bit if it was previously set
+		}
 	}
 }
 
@@ -1352,7 +1352,10 @@ void state406(void)
 	}
 	else
 	{
-		CAN_OUT_ErrorFlags &= ~(1<<19); //Clear error flag bit
+		if(((CAN_OUT_ErrorFlags>>19) & 1) == 1) //If error flag was set but no error is still present
+		{
+			CAN_OUT_ErrorFlags &= ~(1<<19); //Clear error flag bit if it was previously set
+		}
 	}
 }
 
@@ -1371,11 +1374,10 @@ void state407(void)
 	}
 	else
 	{
-		if(((CAN_OUT_ErrorFlags>>5) & 1) == 1)
+		if(((CAN_OUT_ErrorFlags>>5) & 1) == 1) //If error flag was set but no error is still present
 		{
-			state = 1;
+			CAN_OUT_ErrorFlags &= ~(1<<5); //Clear error flag bit if it was previously set
 		}
-		CAN_OUT_ErrorFlags &= ~(1<<5); //Clear error flag bit
 	}
 }
 
@@ -1393,7 +1395,11 @@ void state499(void)
 	}
 	else if (CAN_OUT_ErrorFlags == 0)
 	{
-		clearFault();
+		//If there is no current fault but the fault outputs were previously set, clear them
+		if(HAL_GPIO_ReadPin(FLT_OUT_GPIO_Port, FLT_OUT_Pin))
+		{
+			clearFault();
+		}
 	}
 }
 
@@ -1655,9 +1661,14 @@ void fsmInit(void)
 	Pot1Handle = RCM_RegisterRegConv (&Pot1Conv);
 
 	Pot2Conv.regADC = ADC1; /* to be modify to match your ADC */
-	Pot2Conv.channel = ADC_CHANNEL_0;/* to be modify to match your ADC channel */
+	Pot2Conv.channel = ADC_CHANNEL_7;/* to be modify to match your ADC channel */
 	Pot2Conv.samplingTime = ADC_SAMPLETIME_3CYCLES; /* to be modify to match your sampling time */
 	Pot2Handle = RCM_RegisterRegConv (&Pot2Conv);
+
+	DCCurrConv.regADC = ADC1;
+	DCCurrConv.channel = ADC_CHANNEL_0;
+	DCCurrConv.samplingTime = ADC_SAMPLETIME_3CYCLES;
+	DCCurrHandle = RCM_RegisterRegConv (&DCCurrConv);
 
 	ThermAHConv.regADC = ADC1;
 	ThermAHConv.channel = ADC_CHANNEL_12;
