@@ -235,62 +235,66 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* hadc)
 }
 
 /**
-* @brief DAC MSP Initialization
+* @brief CAN MSP Initialization
 * This function configures the hardware resources used in this example
-* @param hdac: DAC handle pointer
+* @param hcan: CAN handle pointer
 * @retval None
 */
-void HAL_DAC_MspInit(DAC_HandleTypeDef* hdac)
+void HAL_CAN_MspInit(CAN_HandleTypeDef* hcan)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-  if(hdac->Instance==DAC)
+  if(hcan->Instance==CAN1)
   {
-  /* USER CODE BEGIN DAC_MspInit 0 */
+  /* USER CODE BEGIN CAN1_MspInit 0 */
 
-  /* USER CODE END DAC_MspInit 0 */
+  /* USER CODE END CAN1_MspInit 0 */
     /* Peripheral clock enable */
-    __HAL_RCC_DAC_CLK_ENABLE();
+    __HAL_RCC_CAN1_CLK_ENABLE();
 
-    __HAL_RCC_GPIOA_CLK_ENABLE();
-    /**DAC GPIO Configuration
-    PA5     ------> DAC_OUT2
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    /**CAN1 GPIO Configuration
+    PB8     ------> CAN1_RX
+    PB9     ------> CAN1_TX
     */
-    GPIO_InitStruct.Pin = DBG_DAC_CH2_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+    GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
-    HAL_GPIO_Init(DBG_DAC_CH2_GPIO_Port, &GPIO_InitStruct);
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+    GPIO_InitStruct.Alternate = GPIO_AF9_CAN1;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /* USER CODE BEGIN DAC_MspInit 1 */
+  /* USER CODE BEGIN CAN1_MspInit 1 */
 
-  /* USER CODE END DAC_MspInit 1 */
+  /* USER CODE END CAN1_MspInit 1 */
   }
 
 }
 
 /**
-* @brief DAC MSP De-Initialization
+* @brief CAN MSP De-Initialization
 * This function freeze the hardware resources used in this example
-* @param hdac: DAC handle pointer
+* @param hcan: CAN handle pointer
 * @retval None
 */
-void HAL_DAC_MspDeInit(DAC_HandleTypeDef* hdac)
+void HAL_CAN_MspDeInit(CAN_HandleTypeDef* hcan)
 {
-  if(hdac->Instance==DAC)
+  if(hcan->Instance==CAN1)
   {
-  /* USER CODE BEGIN DAC_MspDeInit 0 */
+  /* USER CODE BEGIN CAN1_MspDeInit 0 */
 
-  /* USER CODE END DAC_MspDeInit 0 */
+  /* USER CODE END CAN1_MspDeInit 0 */
     /* Peripheral clock disable */
-    __HAL_RCC_DAC_CLK_DISABLE();
+    __HAL_RCC_CAN1_CLK_DISABLE();
 
-    /**DAC GPIO Configuration
-    PA5     ------> DAC_OUT2
+    /**CAN1 GPIO Configuration
+    PB8     ------> CAN1_RX
+    PB9     ------> CAN1_TX
     */
-    HAL_GPIO_DeInit(DBG_DAC_CH2_GPIO_Port, DBG_DAC_CH2_Pin);
+    HAL_GPIO_DeInit(GPIOB, GPIO_PIN_8|GPIO_PIN_9);
 
-  /* USER CODE BEGIN DAC_MspDeInit 1 */
+  /* USER CODE BEGIN CAN1_MspDeInit 1 */
 
-  /* USER CODE END DAC_MspDeInit 1 */
+  /* USER CODE END CAN1_MspDeInit 1 */
   }
 
 }

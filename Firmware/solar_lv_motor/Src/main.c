@@ -38,29 +38,32 @@
 /* USER CODE BEGIN PD */
 
 //Motor/vehicle parameters
-#define NMAX 4000.0 //Max motor velocity, [RPM]
-#define IRMSMAX 4.0 //Max motor RMS phase current, [A]
-#define IMAXP 1.0 //Max motor current (discharge), [% decimal (0.0-1.0)]
-#define IREGENMAXP 1.0 //Max regen current, [% decimal (0.0-1.0)]
-#define IREGENMAX 8.0 //Max battery (DC) regen current, [A]
-#define WHEELRAD 0.004 //Wheel radius, [m]
-#define CARMASS 5.0 //Vehicle mass, [kg]
-#define VBUSMIN 6.0 //Minimum acceptable DC voltage, [V]
-#define BASECANID 0x500 //Starting CAN ID, default to 0x500 to match Tritium
+#define NMAX 4000.0 //Max motor velocity, [RPM, float]
+#define IRMSMAX 4.0 //Max motor RMS phase current, [A, float]
+#define IMAXP 1.0 //Max motor current (discharge), [% decimal (0.0-1.0), float]
+#define IREGENMAXP 1.0 //Max regen current, [% decimal (0.0-1.0), float]
+#define IREGENMAX 8.0 //Max battery (DC) regen current, [A, float]
+#define WHEELRAD 0.004 //Wheel radius, [m, float]
+#define CARMASS 5.0 //Best approximation of vehicle mass, [kg, float]
+#define VBUSMIN 6.0 //Minimum acceptable DC voltage, [V, float]
+#define CANTXBASEID 0x500 //Starting CAN ID for outbound transmission, default to 0x500 to match Tritium, [Hex int]
+#define CANRXBASEID 0x400 //Starting CAN ID for inbound recieving, default to 0x400 to match Tritium, [Hex int]
 
 //Controller parameters
-#define ISENSORGAIN 0.077 //Current sensor gain, [V/A]
-#define MOTORSPINUPTIME 2000 //Time to allow motor to start spinning upon restart [ms]
-#define SPEEDRAMPTIME 150 //Ramp time for speed control command, can be 0 but may cause current surges[ms]
-#define TORQUERAMPTIME 150 ////Ramp time for torque control command, can be 0 but may cause current surges[ms]
+#define ISENSORGAIN 0.077 //Current sensor gain, [V/A, float]
+#define MOTORSPINUPTIME 2000 //Time to allow motor to start spinning upon restart, [ms, int]
+#define SPEEDRAMPTIME 150 //Ramp time for speed control command, can be 0 but may cause current surges, [ms, int]
+#define TORQUERAMPTIME 150 //Ramp time for torque control command, can be 0 but may cause current surges, [ms, int]
+#define FANMAXTEMPERATURE 75.0 //MOSFET temperature at which fans should be at 100% speed, can be increased to reduce LV power consumption, [degC, float]
+#define FANMINTEMPERATURE 0.0 //MOSFET temperature at which fans should be at 0% speed (off), can be increased to reduce LV power consumption, [degC, float]
 
 //Firmware parameters
-#define NTOL 10.0 //Motor velocity logic tolerance, [RPM]
-#define ITOLP 0.10 //Motor current logic tolerance, [% decimal (0.0-1.0)]
-#define WDTIMERLIM 2000 //Watchdog timeout limit, [ms]
+#define NTOL 10.0 //Motor velocity logic tolerance, [RPM, float]
+#define ITOLP 0.10 //Motor current logic tolerance, [% decimal (0.0-1.0), float]
+#define WDTIMERLIM 2000 //Watchdog timeout limit, [ms, int]
 
 //Constants
-#define PI 3.14
+#define PI 3.14 //Pi, [unitless, float]
 
 //Calculated constants
 #define S16ACONVFACTOR 65536.0*ISENSORGAIN/3.3 //(1529) Conversion factor for A-to-s16A, [s16A/A]
@@ -71,6 +74,7 @@
 #define WTOL NTOL*PI/30.0 //Motor velocity logic tolerance, [rad/s]
 #define VMAX WMAX*WHEELRAD //Max vehicle velocity, [m/s]
 #define VTOL WTOL*WHEELRAD //Vehicle velocity logic tolerance, [m/s]
+#define FANPWMSLOPE 1.0/(FANMAXTEMPERATURE - FANMINTEMPERATURE) //Linear slope for fan speed determination, [% decimal (0.0-1.0)/degC, float]
 
 /* USER CODE END PD */
 
@@ -83,7 +87,7 @@
 ADC_HandleTypeDef hadc1;
 ADC_HandleTypeDef hadc2;
 
-DAC_HandleTypeDef hdac;
+CAN_HandleTypeDef hcan1;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
@@ -91,78 +95,83 @@ TIM_HandleTypeDef htim2;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+
 // ************************* GLOBAL VARIABLES ************************* //
+
 // ***** Global usage ***** //
 uint16_t state = 0; // State tracker
 uint16_t currentWDTime = 0; //Watchdog timer for CAN timeout
 uint16_t lastWDTime = 0; //Watchdog timer for CAN timeout
-int MotorSpinupFlag = 0;
+int userDirectionFlag = 0; //Flag for setpoint forward/reverse. 1 if forward, -1 if reverse, 0 if stopped
+int mtrDirectionFlag = 0; //Flag for current direction of motor rotation. 1 if forward, -1 if reverse, 0 if stopped
+int motorSpinupFlag = 0; //Flag for if motor is ramping up to speed
+float fanDutyCycle = 0; //Fan duty cycle for PWM output
 uint16_t delayTimer = 0;
 char msg_debug[327]; // Serial debug msg
 
 // ***** CAN variables ***** //
 union {
-	float testCAN_IN_float;
-	uint32_t testCAN_IN_int;
+	float test_float;
+	uint32_t test_int;
 }
-testCAN_IN;
+CANTx_test;
 
 union {
-	float CAN_IN_current_float;
-	uint32_t CAN_IN_current_int;
+	float current_float;
+	uint32_t current_int;
 }
-CAN_IN_current;
+CANRx_current;
 
 union {
-	float CAN_IN_velocity_float;
-	uint32_t CAN_IN_velocity_int;
+	float velocity_float;
+	uint32_t velocity_int;
 }
-CAN_IN_velocity;
+CANRx_velocity;
 
 union {
-	float CAN_OUT_busVoltage_float;
-	uint32_t CAN_OUT_busVoltage_int;
+	float busVoltage_float;
+	uint32_t busVoltage_int;
 }
-CAN_OUT_busVoltage;
+CANTx_busVoltage;
 
 union {
-	float CAN_OUT_busCurrent_float;
-	uint32_t CAN_OUT_busCurrent_int;
+	float busCurrent_float;
+	uint32_t busCurrent_int;
 }
-CAN_OUT_busCurrent;
+CANTx_busCurrent;
 
 union {
-	float CAN_OUT_mtrVelocity_float;
-	uint32_t CAN_OUT_mtrVelocity_int;
+	float mtrVelocity_float;
+	uint32_t mtrVelocity_int;
 }
-CAN_OUT_mtrVelocity;
+CANTx_mtrVelocity;
 
 union {
-	float CAN_OUT_carVelocity_float;
-	uint32_t CAN_OUT_carVelocity_int;
+	float carVelocity_float;
+	uint32_t carVelocity_int;
 }
-CAN_OUT_carVelocity;
+CANTx_carVelocity;
 
 union {
-	float CAN_OUT_phaseCurrent_float;
-	uint32_t CAN_OUT_phaseCurrent_int;
+	float phaseCurrent_float;
+	uint32_t phaseCurrent_int;
 }
-CAN_OUT_phaseCurrent;
+CANTx_phaseCurrent;
 
 union {
-	float CAN_OUT_mtrTemp_float;
-	uint32_t CAN_OUT_mtrTemp_int;
+	float mtrTemp_float;
+	uint32_t mtrTemp_int;
 }
-CAN_OUT_mtrTemp;
+CANTx_mtrTemp;
 
 union {
-	float CAN_OUT_FETTemp_float;
-	uint32_t CAN_OUT_FETTemp_int;
+	float FETTemp_float;
+	uint32_t FETTemp_int;
 }
-CAN_OUT_FETTemp;
+CANTx_FETTemp;
 
 /*
- * CAN_OUT_ErrorFlags bits:
+ * CANTx_ErrorFlags bits:
  * (Brackets indicate Tritium designation if different from this controller)
  *  5 - DC bus under-voltage (Bus voltage lower limit)
  *  6 - FET over-temperature (Heatsink temperature limiter)
@@ -182,10 +191,56 @@ CAN_OUT_FETTemp;
  *  7-15 - Reserved
  * 23-31 - Reserved
  */
-uint32_t CAN_OUT_ErrorFlags = 0;
-//TODO soft faults
+uint32_t CANTx_ErrorFlags = 0;
 
-// ***** Manual ADC variables ***** //
+CAN_FilterTypeDef CANRxFilter = {
+		  (CANRXBASEID + 1) << 5, //ID1 to filter for
+		  0x0 << 5, //ID2 to filter for
+		  0xFFE0, //Mask1; select so that (Mask1 & receivedID = ID to filter for). Set to 0xFFE0 to get just the ID and not the whole CAN message.
+		  0x0, //Mask2; set to 0 since we only need 1 filter
+		  CAN_FILTER_FIFO0,
+		  0,
+		  CAN_FILTERMODE_IDMASK,
+		  CAN_FILTERSCALE_16BIT,
+		  CAN_FILTER_ENABLE,
+		  0
+};
+
+/*
+ * @brief Header for receiving message.
+ * Fields:
+ * StdId - Standard ID of received message - will depend on filter parameters
+ * ExtId - Extended ID of received message - will be 0 since we do not use it currently
+ * IDE - Type of ID of received message - will be CAN_ID_STD or CAN_ID_EXT
+ * RTR - Remote transmission request - will be CAN_RTR_DATA or CAN_RTR_REMOTE but we don't use remote
+ * DLC - Data length in bytes - should be 8 for this controller
+ * Timestamp
+ * FilterMatchIndex - ??
+ */
+CAN_RxHeaderTypeDef CANRxHeader;
+/*
+ * @brief Header for sending message.
+ * Fields:
+ * StdId - Standard ID of received message - will depend on filter parameters
+ * ExtId - Extended ID of received message - will be 0 since we do not use it currently
+ * IDE - Type of ID of received message - will be CAN_ID_STD or CAN_ID_EXT
+ * RTR - Remote transmission request - will be CAN_RTR_DATA or CAN_RTR_REMOTE but we don't use remote
+ * DLC - Data length in bytes - should be 8 for this controller
+ * Timestamp
+ */
+CAN_TxHeaderTypeDef CANTxHeader = {
+		  CANTXBASEID,
+		  0,
+		  CAN_ID_STD,
+		  CAN_RTR_DATA,
+		  8,
+		  DISABLE
+};
+uint8_t CANRxData[8];
+uint8_t CANTxData[8];
+uint32_t CANTxMailbox;
+
+// ***** ADC variables ***** //
 RegConv_t Pot1Conv;
 uint8_t Pot1Handle;
 uint16_t pot1_value;
@@ -224,9 +279,8 @@ uint16_t thermCL_temp;
 RegConv_t ThermMTRConv;
 uint8_t ThermMTRHandle;
 
-// ***** Helper variables ***** //
-
 // ************************* END GLOBAL VARIABLES ************************* //
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -234,10 +288,10 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_ADC2_Init(void);
-static void MX_DAC_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_CAN1_Init(void);
 static void MX_NVIC_Init(void);
 /* USER CODE BEGIN PFP */
 
@@ -267,6 +321,7 @@ void state200(void);
 void state201(void);
 void state202(void);
 void state298(void);
+void state299(void);
 
 // 3xx states: Fan control
 void state300(void);
@@ -295,19 +350,13 @@ void state505(void);
 
 // 6xx states: CAN sending
 void state600(void);
-void state601(void);
-void state602(void);
-void state603(void);
+void state601(void); //Status information; Base + 1
+void state602(void); //Bus measurement; Base + 2
+void state603(void); //Velocity measurement; Base + 3
+void state604(void); //Phase current measurement; Base + 4
+void state605(void); //Sink & motor temperature measurement; Base + 11
+void state699(void);
 
-// 7xx states: Faults
-void state700(void);
-void state701(void);
-void state702(void);
-void state703(void);
-void state704(void);
-void state705(void);
-void state706(void);
-void state707(void);
 // ************************* END STATE PROTOYPES ************************* //
 
 // ************************* HELPER PROTOTYPES ************************* //
@@ -315,6 +364,7 @@ void fsmInit();
 void faultState();
 void clearFault();
 float convertTempVal(uint16_t thermXX_value);
+void sendCANMessage(uint32_t LowDataByte, uint32_t HighDataByte, int IDBonus);
 void printState();
 void printNum(int num);
 // ************************* END HELPER PROTOTYPES ************************* //
@@ -354,11 +404,11 @@ int main(void)
   MX_GPIO_Init();
   MX_ADC1_Init();
   MX_ADC2_Init();
-  MX_DAC_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_USART2_UART_Init();
   MX_MotorControl_Init();
+  MX_CAN1_Init();
 
   /* Initialize interrupts */
   MX_NVIC_Init();
@@ -392,6 +442,7 @@ int main(void)
 	  	  case 201: state201(); break;
 	  	  case 202: state202(); break;
 	  	  case 298: state298(); break;
+	  	  case 299: state299(); break;
 
 	  	  case 300: state300(); break;
 	  	  case 301: state301(); break;
@@ -419,6 +470,9 @@ int main(void)
 	  	  case 601: state601(); break;
 	  	  case 602: state602(); break;
 	  	  case 603: state603(); break;
+	  	  case 604: state604(); break;
+	  	  case 605: state605(); break;
+	  	  case 699: state699(); break;
 	  }
     /* USER CODE END WHILE */
 
@@ -642,40 +696,39 @@ static void MX_ADC2_Init(void)
 }
 
 /**
-  * @brief DAC Initialization Function
+  * @brief CAN1 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_DAC_Init(void)
+static void MX_CAN1_Init(void)
 {
 
-  /* USER CODE BEGIN DAC_Init 0 */
+  /* USER CODE BEGIN CAN1_Init 0 */
 
-  /* USER CODE END DAC_Init 0 */
+  /* USER CODE END CAN1_Init 0 */
 
-  DAC_ChannelConfTypeDef sConfig = {0};
+  /* USER CODE BEGIN CAN1_Init 1 */
 
-  /* USER CODE BEGIN DAC_Init 1 */
-
-  /* USER CODE END DAC_Init 1 */
-  /** DAC Initialization
-  */
-  hdac.Instance = DAC;
-  if (HAL_DAC_Init(&hdac) != HAL_OK)
+  /* USER CODE END CAN1_Init 1 */
+  hcan1.Instance = CAN1;
+  hcan1.Init.Prescaler = 9;
+  hcan1.Init.Mode = CAN_MODE_NORMAL;
+  hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
+  hcan1.Init.TimeSeg1 = CAN_BS1_8TQ;
+  hcan1.Init.TimeSeg2 = CAN_BS2_1TQ;
+  hcan1.Init.TimeTriggeredMode = DISABLE;
+  hcan1.Init.AutoBusOff = DISABLE;
+  hcan1.Init.AutoWakeUp = DISABLE;
+  hcan1.Init.AutoRetransmission = ENABLE;
+  hcan1.Init.ReceiveFifoLocked = DISABLE;
+  hcan1.Init.TransmitFifoPriority = DISABLE;
+  if (HAL_CAN_Init(&hcan1) != HAL_OK)
   {
     Error_Handler();
   }
-  /** DAC channel OUT2 config
-  */
-  sConfig.DAC_Trigger = DAC_TRIGGER_SOFTWARE;
-  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_DISABLE;
-  if (HAL_DAC_ConfigChannel(&hdac, &sConfig, DAC_CHANNEL_2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN DAC_Init 2 */
+  /* USER CODE BEGIN CAN1_Init 2 */
 
-  /* USER CODE END DAC_Init 2 */
+  /* USER CODE END CAN1_Init 2 */
 
 }
 
@@ -790,7 +843,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-//  htim2.Init.Period = M1_HALL_TIM_PERIOD;
+  htim2.Init.Period = M1_HALL_TIM_PERIOD;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -863,7 +916,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, DRV_DIS_Pin|HALLC_OUT_Pin|HALLB_OUT_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(DRV_DIS_GPIO_Port, DRV_DIS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, FLT_OUT_Pin|HALLA_OUT_Pin, GPIO_PIN_RESET);
@@ -871,12 +924,12 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIO_OUT_GPIO_Port, GPIO_OUT_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : DRV_DIS_Pin HALLC_OUT_Pin HALLB_OUT_Pin */
-  GPIO_InitStruct.Pin = DRV_DIS_Pin|HALLC_OUT_Pin|HALLB_OUT_Pin;
+  /*Configure GPIO pin : DRV_DIS_Pin */
+  GPIO_InitStruct.Pin = DRV_DIS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  HAL_GPIO_Init(DRV_DIS_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : MTR_OC_Pin HV_OV_Pin */
   GPIO_InitStruct.Pin = MTR_OC_Pin|HV_OV_Pin;
@@ -924,10 +977,11 @@ void state000(void)
 {
 	//MC_StopMotor1(); //Make sure motor is stopped at startup
 	HAL_GPIO_WritePin(GPIO_OUT_GPIO_Port, GPIO_OUT_Pin, GPIO_PIN_SET);
-	HAL_GPIO_WritePin(HALLA_OUT_GPIO_Port, HALLA_OUT_Pin, GPIO_PIN_SET);
-	HAL_GPIO_WritePin(HALLB_OUT_GPIO_Port, HALLB_OUT_Pin, GPIO_PIN_SET);
-	HAL_GPIO_WritePin(HALLC_OUT_GPIO_Port, HALLC_OUT_Pin, GPIO_PIN_SET);
+//	HAL_GPIO_WritePin(HALLA_OUT_GPIO_Port, HALLA_OUT_Pin, GPIO_PIN_SET);
+//	HAL_GPIO_WritePin(HALLB_OUT_GPIO_Port, HALLB_OUT_Pin, GPIO_PIN_SET);
+//	HAL_GPIO_WritePin(HALLC_OUT_GPIO_Port, HALLC_OUT_Pin, GPIO_PIN_SET);
 	state = 1; //FSM mode
+	printState();
 //	state = 99; //Workbench mode
 }
 
@@ -963,7 +1017,7 @@ void state100(void)
  */
 void state101(void)
 {
-	CAN_OUT_busVoltage.CAN_OUT_busVoltage_float = ((float) PQD_MotorPowMeasM1.pVBS->AvBusVoltage_d) * ((float) PQD_MotorPowMeasM1.pVBS->ConversionFactor) / 65536.0;
+	CANTx_busVoltage.busVoltage_float = ((float) PQD_MotorPowMeasM1.pVBS->AvBusVoltage_d) * ((float) PQD_MotorPowMeasM1.pVBS->ConversionFactor) / 65536.0;
 	state = 102;
 }
 
@@ -980,10 +1034,8 @@ void state102(void)
 	else if (RCM_GetUserConvState() == RCM_USERCONV_EOC)
 	{
 		//if Done, then read the captured value
-		CAN_OUT_busCurrent.CAN_OUT_busCurrent_float = ((RCM_GetUserConv() * 3.3 / 65535.0) - 1.65) / ISENSORGAIN;
+		CANTx_busCurrent.busCurrent_float = ((RCM_GetUserConv() * 3.3 / 65535.0) - 2.5) / ISENSORGAIN;
 		state = 103;
-		sprintf(msg_debug, "100x DC current: %hu\r\n", (int) (100.0*CAN_OUT_busCurrent.CAN_OUT_busCurrent_float));
-		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 	}
 }
 
@@ -992,8 +1044,8 @@ void state102(void)
  */
 void state103(void)
 {
-	CAN_OUT_mtrVelocity.CAN_OUT_mtrVelocity_float = (float) 6*fabs(MC_GetMecSpeedAverageMotor1()); //Multiply by 6 to convert from dHz to RPM;
-	CAN_OUT_carVelocity.CAN_OUT_carVelocity_float = CAN_OUT_mtrVelocity.CAN_OUT_mtrVelocity_float * WHEELRAD * PI / 30.0; //[m/s]
+	CANTx_mtrVelocity.mtrVelocity_float = (float) 6*MC_GetMecSpeedAverageMotor1(); //Multiply by 6 to convert from dHz to RPM;
+	CANTx_carVelocity.carVelocity_float = CANTx_mtrVelocity.mtrVelocity_float * WHEELRAD * PI / 30.0; //[m/s]
 	state = 104;
 }
 
@@ -1002,7 +1054,7 @@ void state103(void)
  */
 void state104(void)
 {
-	CAN_OUT_phaseCurrent.CAN_OUT_phaseCurrent_float = ((float) MC_GetPhaseCurrentAmplitudeMotor1()) * S16ACONVFACTORINV;
+	CANTx_phaseCurrent.phaseCurrent_float = ((float) MC_GetPhaseCurrentAmplitudeMotor1()) * S16ACONVFACTORINV;
 	state = 105;
 }
 
@@ -1019,7 +1071,7 @@ void state105(void)
 	else if (RCM_GetUserConvState() == RCM_USERCONV_EOC)
 	{
 		//if Done, then read the captured value
-		CAN_OUT_mtrTemp.CAN_OUT_mtrTemp_float = convertTempVal(RCM_GetUserConv());
+		CANTx_mtrTemp.mtrTemp_float = convertTempVal(RCM_GetUserConv());
 		state = 106;
 	}
 }
@@ -1037,7 +1089,7 @@ void state106(void)
 	else if (RCM_GetUserConvState() == RCM_USERCONV_EOC)
 	{
 		//if Done, then read the captured value
-		CAN_OUT_FETTemp.CAN_OUT_FETTemp_float = convertTempVal(RCM_GetUserConv());
+		CANTx_FETTemp.FETTemp_float = convertTempVal(RCM_GetUserConv());
 		state = 107;
 	}
 }
@@ -1057,7 +1109,7 @@ void state107(void)
 		//if Done, then read the captured value
 		thermAL_temp = convertTempVal(RCM_GetUserConv());
 		//If greater than current FETTemp_float, replace (only store max FET temp)
-		if (thermAL_temp > CAN_OUT_FETTemp.CAN_OUT_FETTemp_float) CAN_OUT_FETTemp.CAN_OUT_FETTemp_float = thermAL_temp;
+		if (thermAL_temp > CANTx_FETTemp.FETTemp_float) CANTx_FETTemp.FETTemp_float = thermAL_temp;
 		state = 108;
 	}
 }
@@ -1076,7 +1128,7 @@ void state108(void)
 	{
 		//if Done, then read the captured value
 		thermBH_temp = convertTempVal(RCM_GetUserConv());
-		if (thermBH_temp > CAN_OUT_FETTemp.CAN_OUT_FETTemp_float) CAN_OUT_FETTemp.CAN_OUT_FETTemp_float = thermBH_temp;
+		if (thermBH_temp > CANTx_FETTemp.FETTemp_float) CANTx_FETTemp.FETTemp_float = thermBH_temp;
 		state = 109;
 	}
 }
@@ -1095,7 +1147,7 @@ void state109(void)
 	{
 		//if Done, then read the captured value
 		thermBL_temp = convertTempVal(RCM_GetUserConv());
-		if (thermBL_temp > CAN_OUT_FETTemp.CAN_OUT_FETTemp_float) CAN_OUT_FETTemp.CAN_OUT_FETTemp_float = thermBL_temp;
+		if (thermBL_temp > CANTx_FETTemp.FETTemp_float) CANTx_FETTemp.FETTemp_float = thermBL_temp;
 		state = 110;
 	}
 }
@@ -1115,7 +1167,7 @@ void state110(void)
 //	{
 //		//if Done, then read the captured value
 //		thermCH_temp = convertTempVal(RCM_GetUserConv());
-//		if (thermCH_temp > CAN_OUT_FETTemp.CAN_OUT_FETTemp_float) CAN_OUT_FETTemp.CAN_OUT_FETTemp_float = thermCH_temp;
+//		if (thermCH_temp > CANTx_FETTemp.FETTemp_float) CANTx_FETTemp.FETTemp_float = thermCH_temp;
 //		state = 111;
 //	}
 	state = 111;
@@ -1136,7 +1188,7 @@ void state111(void)
 //	{
 //		//if Done, then read the captured value
 //		thermCL_temp = convertTempVal(RCM_GetUserConv());
-//		if (thermCL_temp > CAN_OUT_FETTemp.CAN_OUT_FETTemp_float) CAN_OUT_FETTemp.CAN_OUT_FETTemp_float = thermCL_temp;
+//		if (thermCL_temp > CANTx_FETTemp.FETTemp_float) CANTx_FETTemp.FETTemp_float = thermCL_temp;
 //		state = 200;
 //	}
 	state = 200;
@@ -1152,41 +1204,35 @@ void state200(void)
 }
 
 /**
- * @brief Check watchdog - TODO
+ * @brief Check watchdog
  */
 void state201(void)
 {
 	currentWDTime = HAL_GetTick();
-	state = 202;
+	state = 202; //CAN implementation
+	state = 298; //Potentiometer implementation
 }
 
-/**
- * @brief Read CAN msg - TEMP: read pot 2
+/*
+ * @brief Read CAN message
  */
 void state202(void)
 {
-	if (RCM_GetUserConvState() == RCM_USERCONV_IDLE)
-	{
-		//if Idle, then program a new conversion request
-		RCM_RequestUserConv(Pot2Handle);
-	}
-	else if (RCM_GetUserConvState() == RCM_USERCONV_EOC)
-	{
-		//if Done, then read the captured value
-		pot2_value = RCM_GetUserConv();
-		//Scale to [%]
-		CAN_IN_current.CAN_IN_current_float = ((float) pot2_value) / 45535.0;
-
-		sprintf(msg_debug, "CAN_IN_current float (percent): %hu\r\n", (int) (100.0*CAN_IN_current.CAN_IN_current_float));
+	while(HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0) == 0) {
+		sprintf(msg_debug, "No CAN message\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-
-		state = 298;
+	} //Delay code while no message is received
+	HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &CANRxHeader, CANRxData); //Put CAN message data in CANRxData temp variable
+	if (CANRxHeader.StdId == CANRXBASEID + 1)
+	{
+		CANRx_velocity.velocity_int = CANRxData[0] | (CANRxData[1] << 8) | (CANRxData[2] << 16) | (CANRxData[3] << 24);
+		CANRx_current.current_int   = CANRxData[4] | (CANRxData[5] << 8) | (CANRxData[6] << 16) | (CANRxData[7] << 24);
+		state = 300;
 	}
-	//State = 300;
 }
 
 /**
- * @brief TEMP - read pot 1
+ * @brief Read pot 1
  */
 void state298(void)
 {
@@ -1201,11 +1247,27 @@ void state298(void)
 		pot1_value = RCM_GetUserConv();
 
 		//Scale to [m/s]
-		CAN_IN_velocity.CAN_IN_velocity_float = ((float) pot1_value) / 45535.0 * VMAX;
+		CANRx_velocity.velocity_float = ((float) pot1_value) / 45535.0 * VMAX;
+		state = 299;
+	}
+}
 
-		sprintf(msg_debug, "100x CAN_IN_velocity float (m/s): %hu\r\n", (int) (CAN_IN_velocity.CAN_IN_velocity_float*100.0));
-		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-
+/**
+ * @brief Read pot 2
+ */
+void state299(void)
+{
+	if (RCM_GetUserConvState() == RCM_USERCONV_IDLE)
+	{
+		//if Idle, then program a new conversion request
+		RCM_RequestUserConv(Pot2Handle);
+	}
+	else if (RCM_GetUserConvState() == RCM_USERCONV_EOC)
+	{
+		//if Done, then read the captured value
+		pot2_value = RCM_GetUserConv();
+		//Scale to [%]
+		CANRx_current.current_float = ((float) pot2_value) / 45535.0;
 		state = 300;
 	}
 }
@@ -1224,6 +1286,7 @@ void state300(void)
  */
 void state301(void)
 {
+	fanDutyCycle = FANPWMSLOPE * CANTx_FETTemp.FETTemp_float;
 	state = 302;
 }
 
@@ -1261,7 +1324,7 @@ void state401(void)
 	if (HAL_GPIO_ReadPin(MTR_OT_GPIO_Port, MTR_OT_Pin) == 1)
 	{
 		faultState();
-		CAN_OUT_ErrorFlags |= 1<<22; //MTR OT: 22nd bit
+		CANTx_ErrorFlags |= 1<<22; //MTR OT: 22nd bit
 		sprintf(msg_debug, "MOTOR OT\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 	}
@@ -1277,7 +1340,7 @@ void state402(void)
 	if (HAL_GPIO_ReadPin(MTR_OC_GPIO_Port, MTR_OC_Pin) == 0)
 	{
 		faultState();
-		CAN_OUT_ErrorFlags |= 1<<16; //MTR OC: 16th bit
+		CANTx_ErrorFlags |= 1<<16; //MTR OC: 16th bit
 		sprintf(msg_debug, "MOTOR OC\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 	}
@@ -1292,7 +1355,7 @@ void state403(void)
 	if (HAL_GPIO_ReadPin(HV_OV_GPIO_Port, HV_OV_Pin) == 1)
 	{
 		faultState();
-		CAN_OUT_ErrorFlags |= 1<<18; //HV OV: 18th bit
+		CANTx_ErrorFlags |= 1<<18; //HV OV: 18th bit
 		sprintf(msg_debug, "DC BUS OV\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 	}
@@ -1307,7 +1370,7 @@ void state404(void)
 	if (HAL_GPIO_ReadPin(FET_OT_GPIO_Port, FET_OT_Pin) == 1)
 	{
 		faultState();
-		CAN_OUT_ErrorFlags |= 1<<6; //FET OT: 6th bit
+		CANTx_ErrorFlags |= 1<<6; //FET OT: 6th bit
 		sprintf(msg_debug, "FET OT\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 	}
@@ -1322,16 +1385,16 @@ void state405(void)
 	if (currentWDTime - lastWDTime > WDTIMERLIM)
 	{
 		faultState();
-		CAN_OUT_ErrorFlags |= 1<<20; //Communication fault: 20th bit
+		CANTx_ErrorFlags |= 1<<20; //Communication fault: 20th bit
 		sprintf(msg_debug, "WD timeout\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 	}
 	else
 	{
 		lastWDTime = HAL_GetTick();
-		if(((CAN_OUT_ErrorFlags>>20) & 1) == 1) //If error flag was set but no error is still present
+		if(((CANTx_ErrorFlags>>20) & 1) == 1) //If error flag was set but no error is still present
 		{
-			CAN_OUT_ErrorFlags &= ~(1<<20); //Clear error flag bit if it was previously set
+			CANTx_ErrorFlags &= ~(1<<20); //Clear error flag bit if it was previously set
 		}
 	}
 }
@@ -1346,15 +1409,15 @@ void state406(void)
 	if (MC_GetCurrentFaultsMotor1() > 0 || MC_GetOccurredFaultsMotor1() > 0)
 	{
 		faultState();
-		CAN_OUT_ErrorFlags |= 1<<19; //Control fault: 19th bit
+		CANTx_ErrorFlags |= 1<<19; //Control fault: 19th bit
 		sprintf(msg_debug, "Control fault\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 	}
 	else
 	{
-		if(((CAN_OUT_ErrorFlags>>19) & 1) == 1) //If error flag was set but no error is still present
+		if(((CANTx_ErrorFlags>>19) & 1) == 1) //If error flag was set but no error is still present
 		{
-			CAN_OUT_ErrorFlags &= ~(1<<19); //Clear error flag bit if it was previously set
+			CANTx_ErrorFlags &= ~(1<<19); //Clear error flag bit if it was previously set
 		}
 	}
 }
@@ -1365,18 +1428,18 @@ void state406(void)
 void state407(void)
 {
 	state = 499;
-	if (CAN_OUT_busVoltage.CAN_OUT_busVoltage_float < VBUSMIN)
+	if (CANTx_busVoltage.busVoltage_float < VBUSMIN)
 	{
 		faultState();
-		CAN_OUT_ErrorFlags |= 1<<5; //DC undervoltage: 5th bit
+		CANTx_ErrorFlags |= 1<<5; //DC undervoltage: 5th bit
 		sprintf(msg_debug, "DC voltage missing\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 	}
 	else
 	{
-		if(((CAN_OUT_ErrorFlags>>5) & 1) == 1) //If error flag was set but no error is still present
+		if(((CANTx_ErrorFlags>>5) & 1) == 1) //If error flag was set but no error is still present
 		{
-			CAN_OUT_ErrorFlags &= ~(1<<5); //Clear error flag bit if it was previously set
+			CANTx_ErrorFlags &= ~(1<<5); //Clear error flag bit if it was previously set
 		}
 	}
 }
@@ -1389,11 +1452,11 @@ void state499(void)
 	state = 500;
 	//If any faults have occured (soft or hard), skip command writing
 	//Controller already in safe state
-	if (CAN_OUT_ErrorFlags > 0)
+	if (CANTx_ErrorFlags > 0)
 	{
 		state = 600;
 	}
-	else if (CAN_OUT_ErrorFlags == 0)
+	else if (CANTx_ErrorFlags == 0)
 	{
 		//If there is no current fault but the fault outputs were previously set, clear them
 		if(HAL_GPIO_ReadPin(FLT_OUT_GPIO_Port, FLT_OUT_Pin))
@@ -1417,46 +1480,95 @@ void state500(void)
  */
 void state501(void)
 {
+	//Check driver input direction
+	if (CANRx_velocity.velocity_float > 0)
+	{
+		userDirectionFlag = 1;
+	}
+	else if (CANRx_velocity.velocity_float < 0)
+	{
+		CANRx_velocity.velocity_float = fabs(CANRx_velocity.velocity_float);
+		userDirectionFlag = -1;
+	}
+	else
+	{
+		userDirectionFlag = 0;
+	}
+
+	//Check motor direction
+	if (CANTx_mtrVelocity.mtrVelocity_float > 0 && CANTx_mtrVelocity.mtrVelocity_float < NMAX)
+	{
+		mtrDirectionFlag = 1;
+	}
+	else if(CANTx_mtrVelocity.mtrVelocity_float < 0 && CANTx_mtrVelocity.mtrVelocity_float > -1*NMAX)
+	{
+		mtrDirectionFlag = -1;
+	}
+	else
+	{
+		mtrDirectionFlag = 0;
+	}
+
+	//If motor needs to change direction, first bring to a stop
+
+	/*
+	 * Check userDirectionFlag + mtrDirectionFlag:
+	 *  1 +  1 =  2 --> fwd
+	 *  1 +  0 =  1 --> fwd
+	 *  1 + -1 =  0 --> stop
+	 *  0 +  1 =  1 --> stop
+	 *  0 +  0 =  0 --> stop
+	 *  0 + -1 = -1 --> stop
+	 * -1 +  1 =  0 --> stop
+	 * -1 +  0 = -1 --> rvrs
+	 * -1 + -1 = -2 --> rvrs
+	 */
+	if (userDirectionFlag + mtrDirectionFlag == 0)
+	{
+		CANRx_velocity.velocity_float = 0;
+		CANRx_current.current_float = 0;
+	}
+
 	//Default: torque control
 	state = 502;
 
 	//If I > Imax
-	if (CAN_IN_current.CAN_IN_current_float > IMAXP + ITOLP)
+	if (CANRx_current.current_float > IMAXP + ITOLP)
 	{
-		//DNE
+		//State does not (should not) exist
 		sprintf(msg_debug, "State DNE\r\n");
 		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 
-		CAN_IN_current.CAN_IN_current_float = 0.0;
-		CAN_IN_velocity.CAN_IN_velocity_float = 0.0;
+		CANRx_current.current_float = 0.0;
+		CANRx_velocity.velocity_float = 0.0;
 	}
-	// If I = 0
-	else if (CAN_IN_current.CAN_IN_current_float <= ITOLP)
+	//If I = 0
+	else if (CANRx_current.current_float <= ITOLP)
 	{
 		//Torque control - do nothing
 	}
-	// If I = Imax && V <= Vmax
-	else if (CAN_IN_current.CAN_IN_current_float >= IMAXP - ITOLP
-			&& CAN_IN_current.CAN_IN_current_float <= IMAXP + ITOLP
-			&& CAN_IN_velocity.CAN_IN_velocity_float <= VMAX + VTOL)
+	//If I = Imax && V <= Vmax
+	else if (CANRx_current.current_float >= IMAXP - ITOLP
+			&& CANRx_current.current_float <= IMAXP + ITOLP
+			&& CANRx_velocity.velocity_float <= VMAX + VTOL)
 	{
-		// Speed control
+		//Speed control
 		state = 503;
-		if (CAN_IN_velocity.CAN_IN_velocity_float < VTOL)
+		if (CANRx_velocity.velocity_float < VTOL)
 		{
-			// Regen
+			//Regen
 			state = 504;
 		}
 	}
-	// If I < Imax && V < VMax
-	else if (CAN_IN_current.CAN_IN_current_float < IMAXP - ITOLP
-			&& CAN_IN_velocity.CAN_IN_velocity_float < VMAX - VTOL)
+	//If I < Imax && V < VMax
+	else if (CANRx_current.current_float < IMAXP - ITOLP
+			&& CANRx_velocity.velocity_float < VMAX - VTOL)
 	{
-		// Speed control
+		//Speed control
 		state = 503;
-		if (CAN_IN_velocity.CAN_IN_velocity_float < VTOL)
+		if (CANRx_velocity.velocity_float < VTOL)
 		{
-			// Regen
+			//Regen
 			state = 504;
 		}
 	}
@@ -1467,7 +1579,7 @@ void state501(void)
  */
 void state502(void)
 {
-	float finalTorque = CAN_IN_current.CAN_IN_current_float * IQMAXS16A;
+	float finalTorque = userDirectionFlag * CANRx_current.current_float * IQMAXS16A;
 
 	sprintf(msg_debug, "Torque ramp value: %hu\r\n", (int) finalTorque);
 	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
@@ -1481,7 +1593,7 @@ void state502(void)
  */
 void state503(void)
 {
-	float finalSpeed = CAN_IN_velocity.CAN_IN_velocity_float * 30.0 / (PI * WHEELRAD); //RPM
+	float finalSpeed = userDirectionFlag * CANRx_velocity.velocity_float * 30.0 / (PI * WHEELRAD); //RPM
 
 	sprintf(msg_debug, "Speed ramp value (RPM): %hu\r\n", (int) finalSpeed);
 	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
@@ -1495,9 +1607,9 @@ void state503(void)
  */
 void state504(void)
 {
-	float Vbat = CAN_OUT_busVoltage.CAN_OUT_busVoltage_float; //[V]
-	float vehicleSpeed = CAN_OUT_carVelocity.CAN_OUT_carVelocity_float; //[m/s]
-	float regenPower = Vbat * IREGENMAX * CAN_IN_current.CAN_IN_current_float; //P = VI
+	float Vbat = CANTx_busVoltage.busVoltage_float; //[V]
+	float vehicleSpeed = CANTx_carVelocity.carVelocity_float; //[m/s]
+	float regenPower = Vbat * IREGENMAX * CANRx_current.current_float; //P = VI
 	float regenEnergy = 0.5 * CARMASS * vehicleSpeed * vehicleSpeed; //1/2 mV^2
 	float regenTime = regenEnergy / regenPower; //[s]
 	float regenTimeMS = regenTime * 1000.0; //[ms]
@@ -1513,10 +1625,7 @@ void state504(void)
 void state505(void)
 {
 	int motorState = MC_GetSTMStateMotor1();
-	int motorSpeed = (int) CAN_OUT_mtrVelocity.CAN_OUT_mtrVelocity_float; //[RPM]
-
-	sprintf(msg_debug, "Current motor speed: %hu\r\n", motorSpeed);
-	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	int motorSpeed = (int) fabs(CANTx_mtrVelocity.mtrVelocity_float); //[RPM]
 
 	int motorSpin = 0;
 	int userSpin = 1;
@@ -1526,7 +1635,7 @@ void state505(void)
 	{
 		motorSpin = 1;
 	}
-	if (CAN_IN_velocity.CAN_IN_velocity_float < VTOL || CAN_IN_current.CAN_IN_current_float < ITOLP) userSpin = 0;
+	if (CANRx_velocity.velocity_float < VTOL || CANRx_current.current_float < ITOLP) userSpin = 0;
 	if (!(motorState == 0 || motorState == 7)) STMSpin = 1; //States in state_machine.h
 
 	state = 600;
@@ -1541,7 +1650,7 @@ void state505(void)
 	//If motor is not spinning AND should not be AND STM started --> Stop
 	//If motor is not spinning AND should not be AND STM stopped --> Leave
 
-	if(MotorSpinupFlag == 0)
+	if(motorSpinupFlag == 0)
 	{
 		if      (motorSpin == 1 && userSpin == 1 && STMSpin == 1)
 		{
@@ -1584,7 +1693,7 @@ void state505(void)
 			sprintf(msg_debug, "Motor started\r\n");
 			HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 //			HAL_Delay(MOTORSPINUPTIME);
-			MotorSpinupFlag = 1;
+			motorSpinupFlag = 1;
 			delayTimer = HAL_GetTick();
 		}
 		else if (motorSpin == 0 && userSpin == 0 && STMSpin == 1)
@@ -1605,7 +1714,7 @@ void state505(void)
 	{
 		if (HAL_GetTick() - delayTimer >= MOTORSPINUPTIME)
 		{
-			MotorSpinupFlag = 0;
+			motorSpinupFlag = 0;
 			sprintf(msg_debug, "Spinup flag reset\r\n");
 			HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 		}
@@ -1618,32 +1727,93 @@ void state505(void)
  */
 void state600(void)
 {
-	state = 601;
-}
-
-/**
- * @brief
- */
-void state601(void)
-{
+//	state = 601; //CAN implementation
+	state = 699; //UART implementation
 	state = 602;
 }
 
 /**
- * @brief
+ * @brief CAN send: Status information; Base + 1
  */
-void state602(void)
+void state601(void)
 {
-	state = 603;
+	sendCANMessage(CANTx_ErrorFlags, 0, 1);
+	state = 602;
 }
 
 /**
- * @brief
+ * @brief CAN send: Bus measurement; Base + 2
+ */
+void state602(void)
+{
+	sendCANMessage(CANTx_busVoltage.busVoltage_int, CANTx_busCurrent.busCurrent_int, 2);
+	HAL_Delay(200);
+	state = 603;
+	state = 699;
+}
+
+/**
+ * @brief CAN send: Velocity measurement; Base + 3
  */
 void state603(void)
 {
+	sendCANMessage(CANTx_mtrVelocity.mtrVelocity_int, CANTx_carVelocity.carVelocity_int, 3);
+	state = 604;
+}
+
+/**
+ * @brief CAN send: Phase current measurement; Base + 4
+ */
+void state604(void)
+{
+	sendCANMessage(CANTx_phaseCurrent.phaseCurrent_int, CANTx_phaseCurrent.phaseCurrent_int, 4);
+	state = 605;
+}
+
+/**
+ * @brief CAN send: Sink and motor temperature measurement; Base + 11
+ */
+void state605(void)
+{
+	sendCANMessage(CANTx_mtrTemp.mtrTemp_int, CANTx_FETTemp.FETTemp_int, 11);
+//	state = 100; //Normal operation
+	state = 699; //UART data dump
+}
+
+/*
+ * @brief UART data dump
+ */
+void state699(void)
+{
+	sprintf(msg_debug, "100x CANRx_velocity float (m/s): %hu\r\n", (int) (CANRx_velocity.velocity_float*100.0));
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	sprintf(msg_debug, "100x CANRx_current float: %hu\r\n", (int) (100.0*CANRx_current.current_float));
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	sprintf(msg_debug, "100x DC current: %hu\r\n", (int) (100.0*CANTx_busCurrent.busCurrent_float));
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	sprintf(msg_debug, "100x DC voltage: %hu\r\n", (int) (100.0*CANTx_busVoltage.busVoltage_float));
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	sprintf(msg_debug, "Current motor speed (RPM): %hu\r\n", (int) CANTx_mtrVelocity.mtrVelocity_float);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	sprintf(msg_debug, "Current vehicle speed (m/s): %hu\r\n", (int) CANTx_carVelocity.carVelocity_float);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	sprintf(msg_debug, "100x Motor phase current: %hu\r\n", (int) (100.0*CANTx_phaseCurrent.phaseCurrent_float));
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	sprintf(msg_debug, "10x Motor temp: %hu\r\n", (int) (10.0*CANTx_mtrTemp.mtrTemp_float));
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	sprintf(msg_debug, "10x FET temp: %hu\r\n", (int) (10.0*CANTx_FETTemp.FETTemp_float));
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	HAL_Delay(100);
 	state = 100;
-	HAL_Delay(250);
 }
 
 // ************************* END STATE FUNCTIONS ************************* //
@@ -1653,8 +1823,9 @@ void state603(void)
 /*
  * @brief initialize FSM variables
  */
-void fsmInit(void)
+ void fsmInit(void)
 {
+	//*** ADC setup ***//
 	Pot1Conv.regADC = ADC1; /* to be modify to match your ADC */
 	Pot1Conv.channel = ADC_CHANNEL_8;/* to be modify to match your ADC channel */
 	Pot1Conv.samplingTime = ADC_SAMPLETIME_3CYCLES; /* to be modify to match your sampling time */
@@ -1701,6 +1872,10 @@ void fsmInit(void)
 //	ThermCLConv.samplingTime = ADC_SAMPLETIME_3CYCLES;
 //	ThermCLHandle = RCM_RegisterRegConv (&ThermCLConv);
 
+	//*** CAN setup ***//
+	//Enable filter and start CAN
+	HAL_CAN_ConfigFilter(&hcan1, &CANRxFilter);
+	HAL_CAN_Start(&hcan1);
 }
 
 /**
@@ -1736,6 +1911,42 @@ void clearFault(void)
 {
 	HAL_GPIO_WritePin(FLT_OUT_GPIO_Port, FLT_OUT_Pin, GPIO_PIN_RESET); //Set FLT_OUT low, turning off the LED
 	HAL_GPIO_WritePin(DRV_DIS_GPIO_Port, DRV_DIS_Pin, GPIO_PIN_RESET); //Set DRV_DIS low, enabling the FETs
+}
+
+/*
+ * @brief Sends CAN message
+ */
+void sendCANMessage(uint32_t LowDataByte, uint32_t HighDataByte, int IDBonus)
+{
+	//Add CAN data to each of the 8 bytes
+	//Convert uint32_t to uint8_t[] with bit shifting
+	CANTxData[0] = (LowDataByte & 0x000000ff) >>  0;
+	CANTxData[1] = (LowDataByte & 0x0000ff00) >>  8;
+	CANTxData[2] = (LowDataByte & 0x00ff0000) >> 16;
+	CANTxData[3] = (LowDataByte & 0xff000000) >> 24;
+	CANTxData[4] = (HighDataByte & 0x000000ff) >>  0;
+	CANTxData[5] = (HighDataByte & 0x0000ff00) >>  8;
+	CANTxData[6] = (HighDataByte & 0x00ff0000) >> 16;
+	CANTxData[7] = (HighDataByte & 0xff000000) >> 24;
+
+	//Set CAN ID
+	CANTxHeader.StdId = CANTXBASEID + IDBonus;
+
+//	if( HAL_CAN_AddTxMessage(&hcan1, &CANTxHeader, CANTxData, &CANTxMailbox) != HAL_OK)
+//	{
+//		sprintf(msg_debug, "Add error\r\n");
+//		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+//		Error_Handler();
+//	}
+//
+//	while(HAL_CAN_IsTxMessagePending(&hcan1, CANTxMailbox))
+//	{
+//		//Do nothing wait for message to send
+//		sprintf(msg_debug, "Stuck sending\r\n");
+//		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+//	}
+	sprintf(msg_debug, "Message sent\r\n");
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 }
 
 /**

@@ -304,19 +304,6 @@ RDivider_Handle_t RealBusVoltageSensorParamsM1 =
 UI_Handle_t UI_Params =
 {
   .bDriveNum = 0,
-  .pFct_DACInit = &DAC_Init,
-  .pFct_DACExec = &DAC_Exec,
-  .pFctDACSetChannelConfig    = &DAC_SetChannelConfig,
-  .pFctDACGetChannelConfig    = &DAC_GetChannelConfig,
-  .pFctDACSetUserChannelValue = &DAC_SetUserChannelValue,
-  .pFctDACGetUserChannelValue = &DAC_GetUserChannelValue,
-
-};
-
-DAC_UI_Handle_t DAC_UI_Params =
-{
-  .hDAC_CH1_ENABLED = DISABLE,
-  .hDAC_CH2_ENABLED = ENABLE
 };
 
 /** RAMP for Motor1.

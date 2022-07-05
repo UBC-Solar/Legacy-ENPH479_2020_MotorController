@@ -465,9 +465,9 @@
 		<define key="LOW_SIDE_BRAKE_STATE" value="TURN_OFF" />
 		<define key="BKIN1_FILTER" value="0" />
 		<define key="BKIN2_FILTER" value="0" />
-		<define key="DAC_FUNCTIONALITY" value="ENABLE" />
+		<define key="DAC_FUNCTIONALITY" value="DISABLE" />
 		<define key="DEBUG_DAC_CH1" value="DISABLE" />
-		<define key="DEBUG_DAC_CH2" value="ENABLE" />
+		<define key="DEBUG_DAC_CH2" value="DISABLE" />
 		<define key="DEFAULT_DAC_CHANNEL_1" value="MC_PROTOCOL_REG_MEAS_ROT_SPEED" />
 		<define key="DEFAULT_DAC_CHANNEL_2" value="MC_PROTOCOL_REG_MEAS_ROT_SPEED" />
 		<define key="DEFAULT_DAC_MOTOR" value="0" />
@@ -475,13 +475,13 @@
 		<define key="DAC_TIMER_CH1_GPIO_PORT" value="GPIOA" />
 		<define key="DAC_TIMER_CH1_GPIO_PIN" value="GPIO_Pin_0" />
 		<define key="DAC_TIMER_CH2_GPIO_PORT" value="GPIOA" />
-		<define key="DAC_TIMER_CH2_GPIO_PIN" value="GPIO_Pin_5" />
+		<define key="DAC_TIMER_CH2_GPIO_PIN" value="GPIO_Pin_0" />
 		<define key="SW_OV_CURRENT_PROT_ENABLING" value="ENABLE" />
 		<define key="CTRBDID" value="0" />
 		<define key="SHARED_SIGNAL_ENABLE" value="FALSE" />
 		<define key="DAC_EMULATED" value="FALSE" />
 		<define key="MCU" value="STM32F446RE" />
 		<define key="BOARD" value="CUSTOM" />
-		<define key="MC_WORKBENCH_VERSION" value="5.4.5.20506" />
+		<define key="MC_WORKBENCH_VERSION" value="5.4.7.21279" />
 	</defines>
 </STWorkBench>

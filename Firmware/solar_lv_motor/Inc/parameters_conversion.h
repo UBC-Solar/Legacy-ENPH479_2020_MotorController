@@ -149,8 +149,8 @@
 /****** Prepares the UI configurations according the MCconfxx settings ********/
 #define COM_ENABLE | OPT_COM
 
-#define DAC_ENABLE | OPT_DAC
-#define DAC_OP_ENABLE | UI_CFGOPT_DAC
+#define DAC_ENABLE
+#define DAC_OP_ENABLE
 
 /* Motor 1 settings */
 #define FW_ENABLE

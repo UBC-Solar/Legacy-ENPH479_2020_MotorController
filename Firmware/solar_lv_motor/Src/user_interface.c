@@ -752,46 +752,6 @@ __weak int32_t UI_GetReg(UI_Handle_t *pHandle, MC_Protocol_REG_t bRegID, bool * 
     }
     break;
 
-    case MC_PROTOCOL_REG_DAC_OUT1:
-    {
-      MC_Protocol_REG_t value = UI_GetDAC(pHandle, DAC_CH0);
-      bRetVal = value;
-    }
-    break;
-
-    case MC_PROTOCOL_REG_DAC_OUT2:
-    {
-      MC_Protocol_REG_t value = UI_GetDAC(pHandle, DAC_CH1);
-      bRetVal = value;
-    }
-    break;
-
-    case MC_PROTOCOL_REG_DAC_USER1:
-    {
-      if (pHandle->pFctDACGetUserChannelValue)
-      {
-        bRetVal = (int32_t) pHandle->pFctDACGetUserChannelValue(pHandle, 0);
-      }
-      else
-      {
-        bRetVal = (uint32_t) 0;
-      }
-    }
-    break;
-
-    case MC_PROTOCOL_REG_DAC_USER2:
-    {
-      if (pHandle->pFctDACGetUserChannelValue)
-      {
-        bRetVal = (int32_t) pHandle->pFctDACGetUserChannelValue(pHandle, 1);
-      }
-      else
-      {
-        bRetVal = (uint32_t) 0;
-      }
-    }
-    break;
-
     case MC_PROTOCOL_REG_MAX_APP_SPEED:
     {
       bRetVal = (STC_GetMaxAppPositiveMecSpeedUnit(pMCT->pSpeednTorqueCtrl) * _RPM)/SPEED_UNIT ;
@@ -1120,84 +1080,6 @@ __weak void UI_SetCurrentReferences(UI_Handle_t *pHandle, int16_t hIqRef, int16_
 __weak bool UI_GetMPInfo(pMPInfo_t stepList, pMPInfo_t pMPInfo)
 {
     return false;
-}
-
-/**
-  * @brief  Hardware and software DAC initialization.
-  * @param  pHandle: Pointer on Handle structure of DACx UI component.
-  * @retval none.
-  */
-__weak void UI_DACInit(UI_Handle_t *pHandle)
-{
-  if (pHandle->pFct_DACInit)
-  {
-	  pHandle->pFct_DACInit(pHandle);
-  }
-}
-
-/**
-  * @brief  Allow to update the DAC outputs.
-  * @param  pHandle: Pointer on Handle structure of DACx UI component.
-  * @retval none.
-  */
-void UI_DACExec(UI_Handle_t *pHandle)
-{
-  if (pHandle->pFct_DACExec)
-  {
-    pHandle->pFct_DACExec(pHandle);
-  }
-}
-
-/**
-  * @brief  Allow to set up the DAC outputs.
-  *         Selected variables will be provided in the related output channels after next DACExec.
-  * @param  pHandle: Pointer on Handle structure of DACx UI component.
-  * @param  bChannel: DAC channel to program.
-  *         It must be one of the exported channels (Example: DAC_CH0).
-  * @param  bVariable: Value to be provided in out through the selected channel.
-  *         It must be one of the exported UI register (Example: MC_PROTOCOL_REG_I_A).
-  * @retval none.
-  */
-void UI_SetDAC(UI_Handle_t *pHandle, DAC_Channel_t bChannel,
-                         MC_Protocol_REG_t bVariable)
-{
-  if (pHandle->pFctDACSetChannelConfig)
-  {
-	  pHandle->pFctDACSetChannelConfig(pHandle, bChannel, bVariable);
-  }
-}
-
-/**
-  * @brief  Allow to get the current DAC channel selected output.
-  * @param  pHandle: Pointer on Handle structure of DACx UI component.
-  * @param  bChannel: Inspected DAC channel.
-  *         It must be one of the exported channels (Example: DAC_CH0).
-  * @retval MC_Protocol_REG_t: Variables provided in out through the inspected channel.
-  *         It must be one of the exported UI register (Example: MC_PROTOCOL_REG_I_A).
-  */
-__weak MC_Protocol_REG_t UI_GetDAC(UI_Handle_t *pHandle, DAC_Channel_t bChannel)
-{
-  MC_Protocol_REG_t retVal = MC_PROTOCOL_REG_UNDEFINED;
-  if (pHandle->pFctDACGetChannelConfig)
-  {
-    retVal = pHandle->pFctDACGetChannelConfig(pHandle, bChannel);
-  }
-  return retVal;
-}
-
-/**
-  * @brief  Allow to set the value of the user DAC channel.
-  * @param  pHandle: Pointer on Handle structure of DACx UI component.
-  * @param  bUserChNumber: user DAC channel to program.
-  * @param  hValue: Value to be put in output.
-  * @retval none.
-  */
-__weak void UI_SetUserDAC(UI_Handle_t *pHandle, DAC_UserChannel_t bUserChNumber, int16_t hValue)
-{
-  if (pHandle->pFctDACSetUserChannelValue)
-  {
-	  pHandle->pFctDACSetUserChannelValue(pHandle, bUserChNumber, hValue);
-  }
 }
 
 /**

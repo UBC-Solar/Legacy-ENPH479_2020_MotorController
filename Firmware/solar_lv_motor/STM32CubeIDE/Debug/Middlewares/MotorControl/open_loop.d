@@ -1,7 +1,7 @@
 Middlewares/MotorControl/open_loop.o: \
- C:/Users/Alex/Desktop/ENPH479\ Motor\ Controller/ENPH479_2020_MotorController/Firmware/solar_lv_motor/MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Src/open_loop.c \
- ../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Inc/open_loop.h \
- ../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Inc/mc_type.h \
+ C:/Users/user/Desktop/ENPH479_2020_MotorController/Firmware/solar_lv_motor/MCSDK_v5.4.7/MotorControl/MCSDK/MCLib/Any/Src/open_loop.c \
+ ../../MCSDK_v5.4.7/MotorControl/MCSDK/MCLib/Any/Inc/open_loop.h \
+ ../../MCSDK_v5.4.7/MotorControl/MCSDK/MCLib/Any/Inc/mc_type.h \
  ../../Inc/mc_stm_types.h \
  ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_ll_system.h \
  ../../Drivers/CMSIS/Device/ST/STM32F4xx/Include/stm32f4xx.h \
@@ -27,8 +27,7 @@ Middlewares/MotorControl/open_loop.o: \
  ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_adc.h \
  ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_ll_adc.h \
  ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_adc_ex.h \
- ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_dac.h \
- ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_dac_ex.h \
+ ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_can.h \
  ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_flash.h \
  ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_flash_ex.h \
  ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_flash_ramfunc.h \
@@ -44,12 +43,12 @@ Middlewares/MotorControl/open_loop.o: \
  ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_ll_dac.h \
  ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_ll_dma.h \
  ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_ll_bus.h \
- ../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Inc/virtual_speed_sensor.h \
- ../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Inc/speed_pos_fdbk.h
+ ../../MCSDK_v5.4.7/MotorControl/MCSDK/MCLib/Any/Inc/virtual_speed_sensor.h \
+ ../../MCSDK_v5.4.7/MotorControl/MCSDK/MCLib/Any/Inc/speed_pos_fdbk.h
 
-../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Inc/open_loop.h:
+../../MCSDK_v5.4.7/MotorControl/MCSDK/MCLib/Any/Inc/open_loop.h:
 
-../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Inc/mc_type.h:
+../../MCSDK_v5.4.7/MotorControl/MCSDK/MCLib/Any/Inc/mc_type.h:
 
 ../../Inc/mc_stm_types.h:
 
@@ -101,9 +100,7 @@ Middlewares/MotorControl/open_loop.o: \
 
 ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_adc_ex.h:
 
-../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_dac.h:
-
-../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_dac_ex.h:
+../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_can.h:
 
 ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_flash.h:
 
@@ -135,6 +132,6 @@ Middlewares/MotorControl/open_loop.o: \
 
 ../../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_ll_bus.h:
 
-../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Inc/virtual_speed_sensor.h:
+../../MCSDK_v5.4.7/MotorControl/MCSDK/MCLib/Any/Inc/virtual_speed_sensor.h:
 
-../../MCSDK_v5.4.5/MotorControl/MCSDK/MCLib/Any/Inc/speed_pos_fdbk.h:
+../../MCSDK_v5.4.7/MotorControl/MCSDK/MCLib/Any/Inc/speed_pos_fdbk.h:

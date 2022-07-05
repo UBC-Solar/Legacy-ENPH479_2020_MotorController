@@ -1,4 +1,4 @@
-stm32f4xx_mc_it.c:70:6:ADC_IRQHandler	8	static
+stm32f4xx_mc_it.c:70:6:ADC_IRQHandler	0	static
 stm32f4xx_mc_it.c:101:6:TIM1_UP_TIM10_IRQHandler	0	static
 stm32f4xx_mc_it.c:119:6:TIM1_BRK_TIM9_IRQHandler	8	static
 stm32f4xx_mc_it.c:143:6:USART2_IRQHandler	16	static

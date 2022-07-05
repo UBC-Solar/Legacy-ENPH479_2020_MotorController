@@ -79,8 +79,6 @@ void Error_Handler(void);
 #define UART_RX_GPIO_Port GPIOA
 #define M1_CURR_AMPL_V_Pin GPIO_PIN_4
 #define M1_CURR_AMPL_V_GPIO_Port GPIOA
-#define DBG_DAC_CH2_Pin GPIO_PIN_5
-#define DBG_DAC_CH2_GPIO_Port GPIOA
 #define M1_OCP_Pin GPIO_PIN_6
 #define M1_OCP_GPIO_Port GPIOA
 #define POT2_TEMP_Pin GPIO_PIN_7
@@ -93,8 +91,6 @@ void Error_Handler(void);
 #define POT1_GPIO_Port GPIOB
 #define DRV_DIS_Pin GPIO_PIN_1
 #define DRV_DIS_GPIO_Port GPIOB
-#define HALLC_OUT_Pin GPIO_PIN_10
-#define HALLC_OUT_GPIO_Port GPIOB
 #define MTR_OC_Pin GPIO_PIN_12
 #define MTR_OC_GPIO_Port GPIOB
 #define M1_PWM_UL_Pin GPIO_PIN_13
@@ -119,8 +115,6 @@ void Error_Handler(void);
 #define HALLA_OUT_GPIO_Port GPIOA
 #define GPIO_OUT_Pin GPIO_PIN_11
 #define GPIO_OUT_GPIO_Port GPIOC
-#define HALLB_OUT_Pin GPIO_PIN_3
-#define HALLB_OUT_GPIO_Port GPIOB
 #define HV_OV_Pin GPIO_PIN_6
 #define HV_OV_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */

@@ -77,7 +77,7 @@ void ADC_IRQHandler(void)
     // Clear Flags
     ADC1->SR &= ~(uint32_t)(LL_ADC_FLAG_JEOS | LL_ADC_FLAG_JSTRT);
 
-    UI_DACUpdate(TSK_HighFrequencyTask());  /*GUI, this section is present only if DAC is enabled*/
+    TSK_HighFrequencyTask();          /*GUI, this section is present only if DAC is disabled*/
   }
 #ifdef ADC3
   else
@@ -85,7 +85,7 @@ void ADC_IRQHandler(void)
     // Clear Flags
     ADC3->SR &= ~(uint32_t)(LL_ADC_FLAG_JEOS | LL_ADC_FLAG_JSTRT);
 
-    UI_DACUpdate(TSK_HighFrequencyTask());  /*GUI, this section is present only if DAC is enabled*/
+    TSK_HighFrequencyTask();          /*GUI, this section is present only if DAC is disabled*/
   }
 #endif
   /* USER CODE BEGIN ADC_IRQn 1 */

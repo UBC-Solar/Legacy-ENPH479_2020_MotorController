@@ -653,7 +653,7 @@ __weak bool TSK_StopPermanencyTimeHasElapsedM1(void)
 #if defined (CCMRAM)
 #if defined (__ICCARM__)
 #pragma location = ".ccmram"
-#elif defined (__CC_ARM)
+#elif defined (__CC_ARM) || defined(__GNUC__)
 __attribute__((section (".ccmram")))
 #endif
 #endif
@@ -753,7 +753,7 @@ inline uint16_t FOC_CurrControllerM1(void)
 
   speedHandle = STC_GetSpeedSensor(pSTC[M1]);
   hElAngle = SPD_GetElAngle(speedHandle);
-  hElAngle += SPD_GetInstElSpeedDpp(speedHandle)*REV_PARK_ANGLE_COMPENSATION_FACTOR;
+  hElAngle += SPD_GetInstElSpeedDpp(speedHandle)*PARK_ANGLE_COMPENSATION_FACTOR;
   PWMC_GetPhaseCurrents(pwmcHandle[M1], &Iab);
   Ialphabeta = MCM_Clarke(Iab);
   Iqd = MCM_Park(Ialphabeta, hElAngle);

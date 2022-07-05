@@ -94,7 +94,6 @@ MPInfo_t MPInfo = {0, 0};
 * @param  fFcpSend Pointer on FCP's send message function
 * @param  fFcpReceive Pointer on FCP's receive message function
 * @param  fFcpAbortReceive Pointer on FCP's abort receive message function
-* @param  pDAC Pointer on DAC component.
 * @param  s_fwVer Pointer on string containing FW release version.
 */
 __weak void MCP_Init( MCP_Handle_t *pHandle,
@@ -102,11 +101,9 @@ __weak void MCP_Init( MCP_Handle_t *pHandle,
                FCP_SendFct_t fFcpSend,
                FCP_ReceiveFct_t fFcpReceive,
                FCP_AbortReceiveFct_t fFcpAbortReceive,
-               DAC_UI_Handle_t * pDAC,
                const char* s_fwVer )
 {
   pHandle->pFCP = pFCP;
-  pHandle->pDAC = pDAC;
   pHandle->s_fwVer = s_fwVer;
   FCP_SetClient( pFCP, pHandle,
                  (FCP_SentFrameCallback_t) & MCP_SentFrame,
@@ -176,11 +173,6 @@ __weak void MCP_ReceivedFrame(MCP_Handle_t *pHandle, uint8_t Code, uint8_t *buff
     {
       Code &= 0x1F; /* Mask: 0001|1111 */
 
-      /* Change also the DAC selected motor */
-      if (pHandle->pDAC)
-      {
-        UI_SetReg(&pHandle->pDAC->_Super, MC_PROTOCOL_REG_TARGET_MOTOR, bMotorSelection - 1);
-      }
     }
     else
     {
@@ -203,7 +195,6 @@ __weak void MCP_ReceivedFrame(MCP_Handle_t *pHandle, uint8_t Code, uint8_t *buff
           /* Deprecated */
           int32_t wValue = (int32_t)(buffer[1]);
 
-          UI_SetReg(&pHandle->pDAC->_Super, bRegID, wValue);
           bNoError = UI_SetReg(&pHandle->_Super, bRegID, wValue);
         }
         break;
@@ -217,14 +208,12 @@ __weak void MCP_ReceivedFrame(MCP_Handle_t *pHandle, uint8_t Code, uint8_t *buff
 
       case MC_PROTOCOL_REG_DAC_OUT1:
         {
-          UI_SetDAC(&pHandle->pDAC->_Super, DAC_CH0, (MC_Protocol_REG_t)(buffer[1]));
           bNoError = true; /* No check inside class return always true*/
         }
         break;
 
       case MC_PROTOCOL_REG_DAC_OUT2:
         {
-          UI_SetDAC(&pHandle->pDAC->_Super, DAC_CH1, (MC_Protocol_REG_t)(buffer[1]));
           bNoError = true; /* No check inside class return always true*/
         }
         break;
@@ -328,24 +317,11 @@ __weak void MCP_ReceivedFrame(MCP_Handle_t *pHandle, uint8_t Code, uint8_t *buff
 
       case MC_PROTOCOL_REG_DAC_OUT1:
         {
-          if (pHandle->pDAC)
-          {
-            MC_Protocol_REG_t value = UI_GetDAC(&pHandle->pDAC->_Super, DAC_CH0);
-            pHandle->fFcpSend(pHandle->pFCP, ACK_NOERROR, (uint8_t*)(&value), 1);
-            bNoError = true;
-            RequireAck = false;
-          }
         }
         break;
 
       case MC_PROTOCOL_REG_DAC_OUT2:
         {
-          if (pHandle->pDAC)
-          {
-            MC_Protocol_REG_t value = UI_GetDAC(&pHandle->pDAC->_Super, DAC_CH1);
-            pHandle->fFcpSend(pHandle->pFCP, ACK_NOERROR, (uint8_t*)(&value), 1);
-            bNoError = true;
-          }
         }
         break;
 
