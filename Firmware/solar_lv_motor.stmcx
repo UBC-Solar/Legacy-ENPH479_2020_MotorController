@@ -2,7 +2,7 @@
 <STWorkBench>
 	<project>
 		<properties version="2.0">
-			<version value="5.04.07.00" />
+			<version value="5.04.08.00" />
 			<section>PMSM</section>
 			<type>SINGLE</type>
 			<example_prj>false</example_prj>

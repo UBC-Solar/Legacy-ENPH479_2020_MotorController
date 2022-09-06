@@ -1,6 +1,6 @@
 ################################################################################
 # Automatically-generated file. Do not edit!
-# Toolchain: GNU Tools for STM32 (9-2020-q2-update)
+# Toolchain: GNU Tools for STM32 (10.3-2021.10)
 ################################################################################
 
 -include ../makefile.init
@@ -14,7 +14,6 @@ RM := rm -rf
 -include Drivers/CMSIS/subdir.mk
 -include Application/User/subdir.mk
 -include Application/Startup/subdir.mk
--include subdir.mk
 -include objects.mk
 
 ifneq ($(MAKECMDGOALS),clean)
@@ -46,14 +45,14 @@ BUILD_ARTIFACT := $(BUILD_ARTIFACT_PREFIX)$(BUILD_ARTIFACT_NAME)$(if $(BUILD_ART
 EXECUTABLES += \
 solar_lv_motor.elf \
 
+MAP_FILES += \
+solar_lv_motor.map \
+
 SIZE_OUTPUT += \
 default.size.stdout \
 
 OBJDUMP_LIST += \
 solar_lv_motor.list \
-
-OBJCOPY_BIN += \
-solar_lv_motor.bin \
 
 
 # All Target
@@ -63,8 +62,8 @@ all: main-build
 main-build: solar_lv_motor.elf secondary-outputs
 
 # Tool invocations
-solar_lv_motor.elf: $(OBJS) $(USER_OBJS) C:\Users\user\Desktop\ENPH479_2020_MotorController\Firmware\solar_lv_motor\STM32CubeIDE\STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "solar_lv_motor.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\user\Desktop\ENPH479_2020_MotorController\Firmware\solar_lv_motor\STM32CubeIDE\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="solar_lv_motor.map" -Wl,--gc-sections -static -L../../MCSDK_v5.4.5/MotorControl/lib -L../../MCSDK_v5.4.7/MotorControl/lib --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+solar_lv_motor.elf solar_lv_motor.map: $(OBJS) $(USER_OBJS) C:\Users\user\Desktop\ENPH479_2020_MotorController\Firmware\solar_lv_motor\STM32CubeIDE\STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "solar_lv_motor.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\user\Desktop\ENPH479_2020_MotorController\Firmware\solar_lv_motor\STM32CubeIDE\STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="solar_lv_motor.map" -Wl,--gc-sections -static -L../../MCSDK_v5.4.8/MotorControl/lib -L../../MCSDK_v5.4.5/MotorControl/lib -L../../MCSDK_v5.4.7/MotorControl/lib --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -78,17 +77,12 @@ solar_lv_motor.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
 	@echo 'Finished building: $@'
 	@echo ' '
 
-solar_lv_motor.bin: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-objcopy  -O binary $(EXECUTABLES) "solar_lv_motor.bin"
-	@echo 'Finished building: $@'
-	@echo ' '
-
 # Other Targets
 clean:
-	-$(RM) $(SIZE_OUTPUT)$(OBJDUMP_LIST)$(EXECUTABLES)$(OBJS)$(S_DEPS)$(S_UPPER_DEPS)$(C_DEPS)$(OBJCOPY_BIN) solar_lv_motor.elf
+	-$(RM) default.size.stdout solar_lv_motor.elf solar_lv_motor.list solar_lv_motor.map
 	-@echo ' '
 
-secondary-outputs: $(SIZE_OUTPUT) $(OBJDUMP_LIST) $(OBJCOPY_BIN)
+secondary-outputs: $(SIZE_OUTPUT) $(OBJDUMP_LIST)
 
 fail-specified-linker-script-missing:
 	@echo 'Error: Cannot find the specified linker script. Check the linker settings in the build configuration.'
@@ -97,6 +91,6 @@ fail-specified-linker-script-missing:
 warn-no-linker-script-specified:
 	@echo 'Warning: No linker script specified. Check the linker settings in the build configuration.'
 
-.PHONY: all clean dependents fail-specified-linker-script-missing warn-no-linker-script-specified
+.PHONY: all clean dependents main-build fail-specified-linker-script-missing warn-no-linker-script-specified
 
 -include ../makefile.targets

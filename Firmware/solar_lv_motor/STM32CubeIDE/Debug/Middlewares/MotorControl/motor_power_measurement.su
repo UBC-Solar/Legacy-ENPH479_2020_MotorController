@@ -1,4 +1,4 @@
-motor_power_measurement.c:51:13:MPM_Clear	8	static
-motor_power_measurement.c:71:16:MPM_CalcElMotorPower	12	static
-motor_power_measurement.c:101:16:MPM_GetElMotorPowerW	0	static
-motor_power_measurement.c:112:16:MPM_GetAvrgElMotorPowerW	0	static
+C:/Users/user/Desktop/ENPH479_2020_MotorController/Firmware/solar_lv_motor/MCSDK_v5.4.8/MotorControl/MCSDK/MCLib/Any/Src/motor_power_measurement.c:51:13:MPM_Clear	8	static
+C:/Users/user/Desktop/ENPH479_2020_MotorController/Firmware/solar_lv_motor/MCSDK_v5.4.8/MotorControl/MCSDK/MCLib/Any/Src/motor_power_measurement.c:71:16:MPM_CalcElMotorPower	4	static
+C:/Users/user/Desktop/ENPH479_2020_MotorController/Firmware/solar_lv_motor/MCSDK_v5.4.8/MotorControl/MCSDK/MCLib/Any/Src/motor_power_measurement.c:101:16:MPM_GetElMotorPowerW	0	static
+C:/Users/user/Desktop/ENPH479_2020_MotorController/Firmware/solar_lv_motor/MCSDK_v5.4.8/MotorControl/MCSDK/MCLib/Any/Src/motor_power_measurement.c:112:16:MPM_GetAvrgElMotorPowerW	0	static

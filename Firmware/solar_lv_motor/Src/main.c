@@ -193,19 +193,6 @@ CANTx_FETTemp;
  */
 uint32_t CANTx_ErrorFlags = 0;
 
-CAN_FilterTypeDef CANRxFilter = {
-		  (CANRXBASEID + 1) << 5, //ID1 to filter for
-		  0x0 << 5, //ID2 to filter for
-		  0xFFE0, //Mask1; select so that (Mask1 & receivedID = ID to filter for). Set to 0xFFE0 to get just the ID and not the whole CAN message.
-		  0x0, //Mask2; set to 0 since we only need 1 filter
-		  CAN_FILTER_FIFO0,
-		  0,
-		  CAN_FILTERMODE_IDMASK,
-		  CAN_FILTERSCALE_16BIT,
-		  CAN_FILTER_ENABLE,
-		  0
-};
-
 /*
  * @brief Header for receiving message.
  * Fields:
@@ -228,14 +215,8 @@ CAN_RxHeaderTypeDef CANRxHeader;
  * DLC - Data length in bytes - should be 8 for this controller
  * Timestamp
  */
-CAN_TxHeaderTypeDef CANTxHeader = {
-		  CANTXBASEID,
-		  0,
-		  CAN_ID_STD,
-		  CAN_RTR_DATA,
-		  8,
-		  DISABLE
-};
+CAN_TxHeaderTypeDef CANTxHeader;
+
 uint8_t CANRxData[8];
 uint8_t CANTxData[8];
 uint32_t CANTxMailbox;
@@ -373,6 +354,18 @@ void printNum(int num);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+//CAN data receiver
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+	HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &CANRxHeader, CANRxData);
+
+	if (CANRxHeader.StdId == CANRXBASEID + 1)
+	{
+		CANRx_velocity.velocity_int = CANRxData[0] | (CANRxData[1] << 8) | (CANRxData[2] << 16) | (CANRxData[3] << 24);
+		CANRx_current.current_int   = CANRxData[4] | (CANRxData[5] << 8) | (CANRxData[6] << 16) | (CANRxData[7] << 24);
+	}
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -407,12 +400,20 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_USART2_UART_Init();
-  MX_MotorControl_Init();
+//  MX_MotorControl_Init();
   MX_CAN1_Init();
 
   /* Initialize interrupts */
   MX_NVIC_Init();
   /* USER CODE BEGIN 2 */
+  HAL_CAN_Start(&hcan1);
+  HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
+
+  CANTxHeader.DLC = 8;  // data length
+  CANTxHeader.IDE = CAN_ID_STD;
+  CANTxHeader.RTR = CAN_RTR_DATA;
+  CANTxHeader.StdId = CANTXBASEID;  // ID
+
   state000();
   /* USER CODE END 2 */
 
@@ -422,6 +423,7 @@ int main(void)
   {
 	  switch (state)
 	  {
+	  	  case 0: state000(); break;
 	  	  case 1: state001(); break;
   	  	  case 99: state099(); break;
 
@@ -477,6 +479,13 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  sprintf(msg_debug, "car velocity (float 100x m/s): %lu\r\n", (uint32_t) (100.0*CANRx_velocity.velocity_float));
+	  HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	  sprintf(msg_debug, "mtr current (float perc): %lu\r\n", (uint32_t) (100.0*CANRx_current.current_float));
+	  HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	  printState();
   }
   /* USER CODE END 3 */
 }
@@ -494,6 +503,7 @@ void SystemClock_Config(void)
   */
   __HAL_RCC_PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
+
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
@@ -510,12 +520,14 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+
   /** Activate the Over-Drive mode
   */
   if (HAL_PWREx_EnableOverDrive() != HAL_OK)
   {
     Error_Handler();
   }
+
   /** Initializes the CPU, AHB and APB buses clocks
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
@@ -572,6 +584,7 @@ static void MX_ADC1_Init(void)
   /* USER CODE BEGIN ADC1_Init 1 */
 
   /* USER CODE END ADC1_Init 1 */
+
   /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
   */
   hadc1.Instance = ADC1;
@@ -590,6 +603,7 @@ static void MX_ADC1_Init(void)
   {
     Error_Handler();
   }
+
   /** Configures for the selected ADC injected channel its corresponding rank in the sequencer and its sample time
   */
   sConfigInjected.InjectedChannel = ADC_CHANNEL_1;
@@ -605,6 +619,7 @@ static void MX_ADC1_Init(void)
   {
     Error_Handler();
   }
+
   /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
   */
   sConfig.Channel = ADC_CHANNEL_15;
@@ -614,6 +629,7 @@ static void MX_ADC1_Init(void)
   {
     Error_Handler();
   }
+
   /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
   */
   sConfig.Channel = ADC_CHANNEL_14;
@@ -647,6 +663,7 @@ static void MX_ADC2_Init(void)
   /* USER CODE BEGIN ADC2_Init 1 */
 
   /* USER CODE END ADC2_Init 1 */
+
   /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
   */
   hadc2.Instance = ADC2;
@@ -665,6 +682,7 @@ static void MX_ADC2_Init(void)
   {
     Error_Handler();
   }
+
   /** Configures for the selected ADC injected channel its corresponding rank in the sequencer and its sample time
   */
   sConfigInjected.InjectedChannel = ADC_CHANNEL_4;
@@ -680,6 +698,7 @@ static void MX_ADC2_Init(void)
   {
     Error_Handler();
   }
+
   /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
   */
   sConfig.Channel = ADC_CHANNEL_4;
@@ -711,15 +730,15 @@ static void MX_CAN1_Init(void)
 
   /* USER CODE END CAN1_Init 1 */
   hcan1.Instance = CAN1;
-  hcan1.Init.Prescaler = 9;
+  hcan1.Init.Prescaler = 18;
   hcan1.Init.Mode = CAN_MODE_NORMAL;
   hcan1.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan1.Init.TimeSeg1 = CAN_BS1_8TQ;
-  hcan1.Init.TimeSeg2 = CAN_BS2_1TQ;
+  hcan1.Init.TimeSeg1 = CAN_BS1_2TQ;
+  hcan1.Init.TimeSeg2 = CAN_BS2_2TQ;
   hcan1.Init.TimeTriggeredMode = DISABLE;
   hcan1.Init.AutoBusOff = DISABLE;
   hcan1.Init.AutoWakeUp = DISABLE;
-  hcan1.Init.AutoRetransmission = ENABLE;
+  hcan1.Init.AutoRetransmission = DISABLE;
   hcan1.Init.ReceiveFifoLocked = DISABLE;
   hcan1.Init.TransmitFifoPriority = DISABLE;
   if (HAL_CAN_Init(&hcan1) != HAL_OK)
@@ -728,6 +747,34 @@ static void MX_CAN1_Init(void)
   }
   /* USER CODE BEGIN CAN1_Init 2 */
 
+  CAN_FilterTypeDef canfilterconfig;
+
+  canfilterconfig.FilterActivation = CAN_FILTER_ENABLE; //Always enable
+  canfilterconfig.FilterBank = 18; //Anything between 0-SlaveStartFilterBank
+  canfilterconfig.FilterFIFOAssignment = CAN_RX_FIFO0; //FIFO stack for incoming data, can be FIFO0 or 1
+  canfilterconfig.FilterIdHigh = CANRXBASEID<<5;
+  canfilterconfig.FilterIdLow = 0;
+  canfilterconfig.FilterMaskIdHigh = 0; //0xFFC<<5; //Binary of FFC: 111111111100 -> compare all bits with CANRXBASEID + 1-3 except last 2
+  canfilterconfig.FilterMaskIdLow = 0x0000;
+  canfilterconfig.FilterMode = CAN_FILTERMODE_IDMASK; //Can be mask or list. Mask: looks for particular bits in the identifier. List:
+  canfilterconfig.FilterScale = CAN_FILTERSCALE_32BIT; //Means ID is 32 bits wide
+  canfilterconfig.SlaveStartFilterBank = 20; //0-13: CAN1, 14-27: CAN2. Meaningless if there is only 1
+
+  HAL_CAN_ConfigFilter(&hcan1, &canfilterconfig);
+
+	/*
+	 * Filter calcs:
+	  	Mask: which bits of received ID to compare with filter ID
+		Ref: 23:00, https://www.youtube.com/watch?v=JfWlIY0zAIc&t=0s
+		Incoming IDs:
+		- Base + 1: 0x400 + 1 = 0x401 = 010000000001
+		- Base + 2: 0x400 + 2 = 0x402 = 010000000010
+		- Base + 3: 0x400 + 3 = 0x403 = 010000000011
+		Filter ID:
+		- Base + 0: 0x400 + 0 = 0x400 = 010000000000
+		Mask:
+		- Mask + 0: 0xFFC + 0 = 0xFFC = 111111111100
+	 */
   /* USER CODE END CAN1_Init 2 */
 
 }
@@ -843,7 +890,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = M1_HALL_TIM_PERIOD;
+//  htim2.Init.Period = M1_HALL_TIM_PERIOD;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -975,14 +1022,12 @@ static void MX_GPIO_Init(void)
  */
 void state000(void)
 {
-	//MC_StopMotor1(); //Make sure motor is stopped at startup
-	HAL_GPIO_WritePin(GPIO_OUT_GPIO_Port, GPIO_OUT_Pin, GPIO_PIN_SET);
-//	HAL_GPIO_WritePin(HALLA_OUT_GPIO_Port, HALLA_OUT_Pin, GPIO_PIN_SET);
-//	HAL_GPIO_WritePin(HALLB_OUT_GPIO_Port, HALLB_OUT_Pin, GPIO_PIN_SET);
-//	HAL_GPIO_WritePin(HALLC_OUT_GPIO_Port, HALLC_OUT_Pin, GPIO_PIN_SET);
-	state = 1; //FSM mode
 	printState();
+	//MC_StopMotor1(); //Make sure motor is stopped at startup
+//	state = 1; //FSM mode
 //	state = 99; //Workbench mode
+	state = 500; //Drive commands
+	printState();
 }
 
 /**
@@ -1000,7 +1045,7 @@ void state001(void)
  */
 void state099(void)
 {
-	//printState();
+	printState();
 }
 
 //***** 1xx states: Reading current values *****//
@@ -1210,7 +1255,7 @@ void state201(void)
 {
 	currentWDTime = HAL_GetTick();
 	state = 202; //CAN implementation
-	state = 298; //Potentiometer implementation
+//	state = 298; //Potentiometer implementation
 }
 
 /*
@@ -1218,17 +1263,8 @@ void state201(void)
  */
 void state202(void)
 {
-	while(HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0) == 0) {
-		sprintf(msg_debug, "No CAN message\r\n");
-		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-	} //Delay code while no message is received
-	HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &CANRxHeader, CANRxData); //Put CAN message data in CANRxData temp variable
-	if (CANRxHeader.StdId == CANRXBASEID + 1)
-	{
-		CANRx_velocity.velocity_int = CANRxData[0] | (CANRxData[1] << 8) | (CANRxData[2] << 16) | (CANRxData[3] << 24);
-		CANRx_current.current_int   = CANRxData[4] | (CANRxData[5] << 8) | (CANRxData[6] << 16) | (CANRxData[7] << 24);
-		state = 300;
-	}
+	//CAN messages read via interrupt
+	state = 300;
 }
 
 /**
@@ -1312,7 +1348,8 @@ void state303(void)
  */
 void state400(void)
 {
-	state = 401;
+//	state = 401;
+	state = 500;
 }
 
 /**
@@ -1546,6 +1583,8 @@ void state501(void)
 	else if (CANRx_current.current_float <= ITOLP)
 	{
 		//Torque control - do nothing
+		sprintf(msg_debug, "Torque ramp requested\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 	}
 	//If I = Imax && V <= Vmax
 	else if (CANRx_current.current_float >= IMAXP - ITOLP
@@ -1558,6 +1597,8 @@ void state501(void)
 		{
 			//Regen
 			state = 504;
+			sprintf(msg_debug, "Regen requested\r\n");
+			HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 		}
 	}
 	//If I < Imax && V < VMax
@@ -1566,10 +1607,14 @@ void state501(void)
 	{
 		//Speed control
 		state = 503;
+		sprintf(msg_debug, "Speed ramp requested\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 		if (CANRx_velocity.velocity_float < VTOL)
 		{
 			//Regen
 			state = 504;
+			sprintf(msg_debug, "Regen requested\r\n");
+			HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 		}
 	}
 }
@@ -1585,7 +1630,8 @@ void state502(void)
 	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 
 	MC_ProgramTorqueRampMotor1((int) finalTorque, TORQUERAMPTIME);
-	state = 505;
+//	state = 505;
+	state = 600;
 }
 
 /**
@@ -1599,7 +1645,8 @@ void state503(void)
 	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 
 	MC_ProgramSpeedRampMotor1(finalSpeed/6.0, SPEEDRAMPTIME);
-	state = 505;
+//	state = 505;
+	state = 600;
 }
 
 /**
@@ -1616,7 +1663,8 @@ void state504(void)
 
 	MC_ProgramSpeedRampMotor1(0, regenTimeMS);
 
-	state = 505;
+//	state = 505;
+	state = 600;
 }
 
 /**
@@ -1625,6 +1673,7 @@ void state504(void)
 void state505(void)
 {
 	int motorState = MC_GetSTMStateMotor1();
+
 	int motorSpeed = (int) fabs(CANTx_mtrVelocity.mtrVelocity_float); //[RPM]
 
 	int motorSpin = 0;
@@ -1727,9 +1776,8 @@ void state505(void)
  */
 void state600(void)
 {
-//	state = 601; //CAN implementation
-	state = 699; //UART implementation
-	state = 602;
+	state = 601; //CAN implementation
+//	state = 699; //UART implementation
 }
 
 /**
@@ -1738,18 +1786,27 @@ void state600(void)
 void state601(void)
 {
 	sendCANMessage(CANTx_ErrorFlags, 0, 1);
+
+	sprintf(msg_debug, "Error flags sent: %lu\r\n", CANTx_ErrorFlags);
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
 	state = 602;
 }
 
 /**
  * @brief CAN send: Bus measurement; Base + 2
  */
-void state602(void)
+ void state602(void)
 {
 	sendCANMessage(CANTx_busVoltage.busVoltage_int, CANTx_busCurrent.busCurrent_int, 2);
-	HAL_Delay(200);
+
+	sprintf(msg_debug, "10x Bus voltage sent: %lu\r\n", (uint32_t) (10.0 * CANTx_busVoltage.busVoltage_float));
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	sprintf(msg_debug, "100x Bus current sent: %lu\r\n", (uint32_t) (100.0 * CANTx_busCurrent.busCurrent_float));
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
 	state = 603;
-	state = 699;
 }
 
 /**
@@ -1758,6 +1815,13 @@ void state602(void)
 void state603(void)
 {
 	sendCANMessage(CANTx_mtrVelocity.mtrVelocity_int, CANTx_carVelocity.carVelocity_int, 3);
+
+	sprintf(msg_debug, "100x Motor velocity sent: %lu\r\n", (uint32_t) (100.0 * CANTx_mtrVelocity.mtrVelocity_float));
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	sprintf(msg_debug, "100x Car velocity sent: %lu\r\n", (uint32_t) (100.0 * CANTx_carVelocity.carVelocity_float));
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
 	state = 604;
 }
 
@@ -1767,6 +1831,10 @@ void state603(void)
 void state604(void)
 {
 	sendCANMessage(CANTx_phaseCurrent.phaseCurrent_int, CANTx_phaseCurrent.phaseCurrent_int, 4);
+
+	sprintf(msg_debug, "100x Phase current sent: %lu\r\n", (uint32_t) (100.0 * CANTx_phaseCurrent.phaseCurrent_float));
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
 	state = 605;
 }
 
@@ -1776,8 +1844,16 @@ void state604(void)
 void state605(void)
 {
 	sendCANMessage(CANTx_mtrTemp.mtrTemp_int, CANTx_FETTemp.FETTemp_int, 11);
+
+	sprintf(msg_debug, "10x Motor temp sent: %lu\r\n", (uint32_t) (10.0 * CANTx_mtrTemp.mtrTemp_float));
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	sprintf(msg_debug, "10x FET temp sent: %lu\r\n", (uint32_t) (10.0 * CANTx_FETTemp.FETTemp_float));
+	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
+	state = 0;
 //	state = 100; //Normal operation
-	state = 699; //UART data dump
+//	state = 699; //UART data dump
 }
 
 /*
@@ -1813,7 +1889,7 @@ void state699(void)
 	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 
 	HAL_Delay(100);
-	state = 100;
+	state = 000;
 }
 
 // ************************* END STATE FUNCTIONS ************************* //
@@ -1872,10 +1948,6 @@ void state699(void)
 //	ThermCLConv.samplingTime = ADC_SAMPLETIME_3CYCLES;
 //	ThermCLHandle = RCM_RegisterRegConv (&ThermCLConv);
 
-	//*** CAN setup ***//
-	//Enable filter and start CAN
-	HAL_CAN_ConfigFilter(&hcan1, &CANRxFilter);
-	HAL_CAN_Start(&hcan1);
 }
 
 /**
@@ -1932,21 +2004,19 @@ void sendCANMessage(uint32_t LowDataByte, uint32_t HighDataByte, int IDBonus)
 	//Set CAN ID
 	CANTxHeader.StdId = CANTXBASEID + IDBonus;
 
-//	if( HAL_CAN_AddTxMessage(&hcan1, &CANTxHeader, CANTxData, &CANTxMailbox) != HAL_OK)
-//	{
-//		sprintf(msg_debug, "Add error\r\n");
-//		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
-//		Error_Handler();
-//	}
-//
+	if( HAL_CAN_AddTxMessage(&hcan1, &CANTxHeader, CANTxData, &CANTxMailbox) != HAL_OK)
+	{
+		sprintf(msg_debug, "Send error\r\n");
+		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+	}
+
 //	while(HAL_CAN_IsTxMessagePending(&hcan1, CANTxMailbox))
 //	{
 //		//Do nothing wait for message to send
 //		sprintf(msg_debug, "Stuck sending\r\n");
 //		HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 //	}
-	sprintf(msg_debug, "Message sent\r\n");
-	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
+
 }
 
 /**
@@ -1964,7 +2034,7 @@ void printState(void)
  */
 void printNum(int num)
 {
-	sprintf(msg_debug, "Number: %hu\r\n", num);
+	sprintf(msg_debug, "Number %hu\r\n", num);
 	HAL_UART_Transmit(&huart2, (uint8_t*)msg_debug, strlen(msg_debug), HAL_MAX_DELAY);
 	HAL_Delay(250);
 }
@@ -2003,5 +2073,3 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
-
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

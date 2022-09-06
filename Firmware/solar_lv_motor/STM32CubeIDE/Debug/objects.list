@@ -41,7 +41,6 @@
 "./Middlewares/MotorControl/circle_limitation.o"
 "./Middlewares/MotorControl/digital_output.o"
 "./Middlewares/MotorControl/frame_communication_protocol.o"
-"./Middlewares/MotorControl/hall_speed_pos_fdbk.o"
 "./Middlewares/MotorControl/ics_f4xx_pwm_curr_fdbk.o"
 "./Middlewares/MotorControl/motor_power_measurement.o"
 "./Middlewares/MotorControl/ntc_temperature_sensor.o"

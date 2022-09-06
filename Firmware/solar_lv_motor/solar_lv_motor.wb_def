@@ -482,6 +482,6 @@
 		<define key="DAC_EMULATED" value="FALSE" />
 		<define key="MCU" value="STM32F446RE" />
 		<define key="BOARD" value="CUSTOM" />
-		<define key="MC_WORKBENCH_VERSION" value="5.4.7.21279" />
+		<define key="MC_WORKBENCH_VERSION" value="5.4.8.21553" />
 	</defines>
 </STWorkBench>

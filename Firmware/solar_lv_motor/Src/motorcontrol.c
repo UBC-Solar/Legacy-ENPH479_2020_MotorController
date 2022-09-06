@@ -31,7 +31,7 @@
   * @{
   */
 
-#define FIRMWARE_VERS "ST MC SDK\tVer.5.4.7"
+#define FIRMWARE_VERS "ST MC SDK\tVer.5.4.8"
 const char s_fwVer[32] = FIRMWARE_VERS;
 
 MCI_Handle_t* pMCI[NBR_OF_MOTORS];

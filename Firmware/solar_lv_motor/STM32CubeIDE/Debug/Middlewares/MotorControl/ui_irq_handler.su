@@ -1,2 +1,2 @@
-ui_irq_handler.c:110:6:UIIRQ_SetIrqHandler	0	static
-ui_irq_handler.c:126:7:UIIRQ_ExecIrqHandler	4	static
+C:/Users/user/Desktop/ENPH479_2020_MotorController/Firmware/solar_lv_motor/MCSDK_v5.4.8/MotorControl/MCSDK/UILibrary/Src/ui_irq_handler.c:110:6:UIIRQ_SetIrqHandler	0	static
+C:/Users/user/Desktop/ENPH479_2020_MotorController/Firmware/solar_lv_motor/MCSDK_v5.4.8/MotorControl/MCSDK/UILibrary/Src/ui_irq_handler.c:126:7:UIIRQ_ExecIrqHandler	4	static
